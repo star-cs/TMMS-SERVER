@@ -1,11 +1,12 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 20:19:44
- * @LastEditTime: 2025-07-21 22:58:40
+ * @LastEditTime: 2025-07-22 20:53:27
  * @FilePath: /TMMS-SERVER/tests/network/test_eventloopthread.cpp
  * @Description:
  */
 #include "base/log/log.h"
+#include "base/utils/utils.h"
 #include "network/event.h"
 #include "network/eventloop.h"
 #include "network/eventloopthread.h"
@@ -59,19 +60,29 @@ void test2()
     EventLoopThreadPool pool(2, 0, 2);
     pool.Start();
 
-    std::vector<EventLoop*> lists = pool.GetLoops();
-    for (auto& eventloop : lists)
-    {
-        // 这里还是主线程
-        eventloop->RunInLoop(
-            [&eventloop]()
-            { std::cout << "loop : " << eventloop << "   this id = " << std::this_thread::get_id() << std::endl; });
-    }
+    // std::vector<EventLoop*> lists = pool.GetLoops();
+    // for (auto& eventloop : lists)
+    // {
+    //     // 这里还是主线程
+    //     eventloop->RunInLoop(
+    //         [&eventloop]()
+    //         { std::cout << "loop : " << eventloop << "   this id = " << std::this_thread::get_id() << std::endl; });
+    // }
 
-    // EventLoop* loop = pool.GetNextLoop();
-    // std::cout << "loop : " << loop << std::endl;
+    EventLoop* loop = pool.GetNextLoop();
+    std::cout << "loop : " << loop << std::endl;
+    loop->AddTimer(1, []() { CORE_DEBUG("1 second"); });
+    loop->AddTimer(5, []() { CORE_DEBUG("5 second"); });
+
+    loop->AddTimer(1, []() { CORE_DEBUG("every 1 second"); }, true);
+    loop->AddTimer(5, []() { CORE_DEBUG("every 5 second"); }, true);
+
     // loop = pool.GetNextLoop();
     // std::cout << "loop : " << loop << std::endl;
+    while (1)
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 int main()

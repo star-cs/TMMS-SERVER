@@ -28,12 +28,13 @@ EventLoop::~EventLoop()
 }
 void EventLoop::loop()
 {
-    looping_ = true;
+    looping_        = true;
+    int64_t timeout = 1000;
     while (looping_)
     {
         ::memset(&epoll_events_[0], 0x00, sizeof(struct epoll_event) * epoll_events_.size());
-        auto ret =
-            ::epoll_wait(epoll_fd_, (struct epoll_event*)&epoll_events_[0], static_cast<int>(epoll_events_.size()), -1);
+        auto ret = ::epoll_wait(
+            epoll_fd_, (struct epoll_event*)&epoll_events_[0], static_cast<int>(epoll_events_.size()), timeout);
 
         if (ret >= 0)
         {
@@ -61,7 +62,7 @@ void EventLoop::loop()
 
                     event->OnError(strerror(error)); // 处理子类处理
                 }
-                else if (ev.events & EPOLLHUP && !(ev.events & EPOLLIN)) // 挂起（关闭）事件
+                else if ((ev.events & EPOLLHUP) && !(ev.events & EPOLLIN)) // 挂起（关闭）事件
                 {
                     event->OnClose();
                 }
@@ -80,9 +81,12 @@ void EventLoop::loop()
             {
                 epoll_events_.resize(epoll_events_.size() * 2);
             }
-
             // 处理任务队列
             RunFunctions();
+            // 任务队列里会有添加定时任务的 任务 ~
+
+            // 处理定时任务
+            timingWheel_.OnTimer(base::TTime::NowMS());
         }
         else if (ret < 0)
         { // error
@@ -264,8 +268,17 @@ void EventLoop::RunFunctions()
     while (!functions_.empty())
     {
         auto& f = functions_.front();
+        f();
+        functions_.pop();
+
+        /**
+         * bug经历：
+         *
         functions_.pop();
         f();
+        这样写出问题了，因为f是引用的，先删除再引用函数就出错了
+         *
+        */
     }
 }
 
@@ -281,5 +294,64 @@ void EventLoop::WakeUp()
     pipe_event_->Write((const char*)&tmp, sizeof(tmp));
 
 } // 唤醒loop
+
+// 时间轮
+void EventLoop::InstertEntry(uint32_t delay, EntryPtr entryPtr) // 插入entry，设置超时时间
+{
+    if (IsInLoopThread())
+    {
+        timingWheel_.InstertEntry(delay, entryPtr);
+    }
+    else
+    {
+        RunInLoop([this, delay, entryPtr]() { timingWheel_.InstertEntry(delay, entryPtr); });
+    }
+}
+void EventLoop::AddTimer(double s, const Func& cb, bool recurring)
+{
+    if (IsInLoopThread())
+    {
+        timingWheel_.AddTimer(s, cb, recurring);
+    }
+    else
+    {
+        RunInLoop([this, s, cb, recurring]() { timingWheel_.AddTimer(s, cb, recurring); });
+    }
+}
+void EventLoop::AddTimer(double s, Func&& cb, bool recurring)
+{
+    if (IsInLoopThread())
+    {
+        timingWheel_.AddTimer(s, cb, recurring);
+    }
+    else
+    {
+        RunInLoop([this, s, cb, recurring]() { timingWheel_.AddTimer(s, cb, recurring); });
+    }
+}
+void EventLoop::AddConditionTimer(double s, const Func& cb, std::weak_ptr<void> weak_cond, bool recurring)
+{
+    if (IsInLoopThread())
+    {
+        timingWheel_.AddConditionTimer(s, cb, weak_cond, recurring);
+    }
+    else
+    {
+        RunInLoop([this, s, cb, weak_cond, recurring]()
+                  { timingWheel_.AddConditionTimer(s, cb, weak_cond, recurring); });
+    }
+}
+void EventLoop::AddConditionTimer(double s, Func&& cb, std::weak_ptr<void> weak_cond, bool recurring)
+{
+    if (IsInLoopThread())
+    {
+        timingWheel_.AddConditionTimer(s, cb, weak_cond, recurring);
+    }
+    else
+    {
+        RunInLoop([this, s, cb, weak_cond, recurring]()
+                  { timingWheel_.AddConditionTimer(s, cb, weak_cond, recurring); });
+    }
+}
 
 } // namespace tmms::net

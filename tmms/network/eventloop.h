@@ -1,13 +1,14 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 16:00:25
- * @LastEditTime: 2025-07-21 22:31:27
+ * @LastEditTime: 2025-07-22 15:00:09
  * @FilePath: /TMMS-SERVER/tmms/network/eventloop.h
  * @Description:
  */
 #pragma once
 
 #include "network/event.h"
+#include "network/timingwheel.h"
 #include <functional>
 #include <memory>
 #include <queue>
@@ -38,6 +39,13 @@ public:
     void RunInLoop(const Func& f);
     void RunInLoop(const Func&& f);
 
+    // 时间轮
+    void InstertEntry(uint32_t delay, EntryPtr entryPtr); // 插入entry，设置超时时间
+    void AddTimer(double s, const Func& cb, bool recurring = false);
+    void AddTimer(double s, Func&& cb, bool recurring = false);
+    void AddConditionTimer(double s, const Func& cb, std::weak_ptr<void> weak_cond, bool recurring = false);
+    void AddConditionTimer(double s, Func&& cb, std::weak_ptr<void> weak_cond, bool recurring = false);
+
 private:
     void RunFunctions();
     void WakeUp(); // 唤醒loop
@@ -49,6 +57,7 @@ private:
     std::queue<Func>                                functions_;
     std::mutex                                      lock_;
     std::shared_ptr<PipeEvent>                      pipe_event_;
+    TimingWheel                                     timingWheel_;
 };
 
 } // namespace tmms::net
