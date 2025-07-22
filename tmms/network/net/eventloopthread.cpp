@@ -1,5 +1,5 @@
-#include "network/eventloopthread.h"
-#include "network/eventloop.h"
+#include "network/net/eventloopthread.h"
+#include "network/net/eventloop.h"
 #include <mutex>
 
 namespace tmms::net

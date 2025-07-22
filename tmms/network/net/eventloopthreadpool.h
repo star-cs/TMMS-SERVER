@@ -1,8 +1,8 @@
 #pragma once
 
 #include "base/noncopyable.h"
-#include "network/eventloop.h"
-#include "network/eventloopthread.h"
+#include "network/net/eventloop.h"
+#include "network/net/eventloopthread.h"
 #include <memory>
 
 namespace tmms::net
