@@ -217,8 +217,9 @@ bool EventLoop::EnableEventReading(const std::shared_ptr<Event>& event, bool ena
 // 任务队列相关
 void EventLoop::AssertInLoopThread() // 是否在同一个循环
 {
-    CORE_ASSERT2(!IsInLoopThread(), "It is forbidden to run loop on other thread!!!");
+    CORE_ASSERT2(IsInLoopThread(), "It is forbidden to run loop on other thread!!!");
 }
+
 bool EventLoop::IsInLoopThread() const
 {
     return t_local_eventloop == this;
@@ -246,6 +247,7 @@ void EventLoop::RunInLoop(const Func& f)
         WakeUp();
     }
 }
+
 void EventLoop::RunInLoop(const Func&& f)
 {
     if (IsInLoopThread())
@@ -257,7 +259,7 @@ void EventLoop::RunInLoop(const Func&& f)
         std::lock_guard<std::mutex> lk(lock_);
         functions_.push(std::move(f));
 
-        WakeUp();
+        WakeUp();  
     }
 }
 
@@ -296,15 +298,15 @@ void EventLoop::WakeUp()
 } // 唤醒loop
 
 // 时间轮
-void EventLoop::InstertEntry(uint32_t delay, EntryPtr entryPtr) // 插入entry，设置超时时间
+void EventLoop::InsertEntry(uint32_t delay, EntryPtr entryPtr) // 插入entry，设置超时时间
 {
     if (IsInLoopThread())
     {
-        timingWheel_.InstertEntry(delay, entryPtr);
+        timingWheel_.InsertEntry(delay, entryPtr);
     }
     else
     {
-        RunInLoop([this, delay, entryPtr]() { timingWheel_.InstertEntry(delay, entryPtr); });
+        RunInLoop([this, delay, entryPtr]() { timingWheel_.InsertEntry(delay, entryPtr); });
     }
 }
 void EventLoop::AddTimer(double s, const Func& cb, bool recurring)

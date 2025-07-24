@@ -1,8 +1,8 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 16:00:04
- * @LastEditTime: 2025-07-21 20:18:36
- * @FilePath: /TMMS-SERVER/tmms/network/event.h
+ * @LastEditTime: 2025-07-23 17:16:02
+ * @FilePath: /TMMS-SERVER/tmms/network/net/event.h
  * @Description:
  */
 #pragma once
@@ -23,7 +23,7 @@ public:
     Event();
     Event(EventLoop* loop);
     Event(EventLoop* loop, int fd);
-    ~Event();
+    virtual ~Event();
 
     virtual void OnRead();
     virtual void OnWrite();
@@ -32,7 +32,8 @@ public:
 
     bool EnableWriting(bool enable);
     bool EnableReading(bool enable);
-    int  Fd() const;
+    int  Fd() const { return fd_; }
+    void Close();
 
 protected:
     int        fd_{-1};

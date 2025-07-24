@@ -24,7 +24,7 @@ TimingWheel::~TimingWheel()
 /// @brief  判断插入的时间，循环调用的方式最后执行任务插入到秒的时间轮
 /// @param delay 单位秒
 /// @param entryPtr
-void TimingWheel::InstertEntry(uint32_t delay, EntryPtr entryPtr) // 插入entry，设置超时时间
+void TimingWheel::InsertEntry(uint32_t delay, EntryPtr entryPtr) // 插入entry，设置超时时间
 {
     if (delay <= 0)
     {
@@ -32,15 +32,15 @@ void TimingWheel::InstertEntry(uint32_t delay, EntryPtr entryPtr) // 插入entry
     }
     else if (delay < KTimingMinute)
     {
-        InstertSecondEntry(delay, entryPtr);
+        InsertSecondEntry(delay, entryPtr);
     }
     else if (delay < KTimingHour)
     {
-        InstertMinuteEntry(delay, entryPtr);
+        InsertMinuteEntry(delay, entryPtr);
     }
     else if (delay < KTimingDay)
     {
-        InstertHourEntry(delay, entryPtr);
+        InsertHourEntry(delay, entryPtr);
     }
     else
     {
@@ -50,7 +50,7 @@ void TimingWheel::InstertEntry(uint32_t delay, EntryPtr entryPtr) // 插入entry
             CORE_ERROR("It is not surpport > 30 day!!!");
             return;
         }
-        InstertDayEntry(delay, entryPtr);
+        InsertDayEntry(delay, entryPtr);
     }
 }
 
@@ -104,7 +104,7 @@ void TimingWheel::AddTimer(double s, const Func& cb, bool recurring)
                 AddTimer(s, cb, true);
             }
         });
-    InstertEntry(s, cbEntry);
+    InsertEntry(s, cbEntry);
 }
 
 void TimingWheel::AddTimer(double s, Func&& cb, bool recurring)
@@ -118,7 +118,7 @@ void TimingWheel::AddTimer(double s, Func&& cb, bool recurring)
                 AddTimer(s, cb, true);
             }
         });
-    InstertEntry(s, cbEntry);
+    InsertEntry(s, cbEntry);
 }
 
 void TimingWheel::AddConditionTimer(double s, const Func& cb, std::weak_ptr<void> weak_cond, bool recurring)
@@ -136,7 +136,7 @@ void TimingWheel::AddConditionTimer(double s, const Func& cb, std::weak_ptr<void
                 }
             }
         });
-    InstertEntry(s, cbEntry);
+    InsertEntry(s, cbEntry);
 }
 
 void TimingWheel::AddConditionTimer(double s, Func&& cb, std::weak_ptr<void> weak_cond, bool recurring)
@@ -154,42 +154,42 @@ void TimingWheel::AddConditionTimer(double s, Func&& cb, std::weak_ptr<void> wea
                 }
             }
         });
-    InstertEntry(s, cbEntry);
+    InsertEntry(s, cbEntry);
 }
 
-void TimingWheel::InstertSecondEntry(uint32_t delay, EntryPtr entryPtr)
+void TimingWheel::InsertSecondEntry(uint32_t delay, EntryPtr entryPtr)
 {
     wheels_[kTimingTypeSecond][delay - 1].emplace(entryPtr);
 }
 
-void TimingWheel::InstertMinuteEntry(uint32_t delay, EntryPtr entryPtr)
+void TimingWheel::InsertMinuteEntry(uint32_t delay, EntryPtr entryPtr)
 {
     auto minute = delay / KTimingMinute;
     auto second = delay % KTimingMinute;
 
     CallbackEntry::ptr newEntryPtr =
-        std::make_shared<CallbackEntry>([this, second, entryPtr]() { InstertEntry(second, entryPtr); });
+        std::make_shared<CallbackEntry>([this, second, entryPtr]() { InsertEntry(second, entryPtr); });
 
     wheels_[kTimingTypeMinute][minute - 1].emplace(newEntryPtr);
 }
 
-void TimingWheel::InstertHourEntry(uint32_t delay, EntryPtr entryPtr)
+void TimingWheel::InsertHourEntry(uint32_t delay, EntryPtr entryPtr)
 {
     auto hour   = delay / KTimingHour;
     auto second = delay % KTimingHour;
 
     CallbackEntry::ptr newEntryPtr =
-        std::make_shared<CallbackEntry>([this, second, entryPtr]() { InstertEntry(second, entryPtr); });
+        std::make_shared<CallbackEntry>([this, second, entryPtr]() { InsertEntry(second, entryPtr); });
     wheels_[kTimingTypeHour][hour - 1].emplace(newEntryPtr);
 }
 
-void TimingWheel::InstertDayEntry(uint32_t delay, EntryPtr entryPtr)
+void TimingWheel::InsertDayEntry(uint32_t delay, EntryPtr entryPtr)
 {
     auto day    = delay / KTimingDay;
     auto second = delay % KTimingDay;
 
     CallbackEntry::ptr newEntryPtr =
-        std::make_shared<CallbackEntry>([this, second, entryPtr]() { InstertEntry(second, entryPtr); });
+        std::make_shared<CallbackEntry>([this, second, entryPtr]() { InsertEntry(second, entryPtr); });
     wheels_[kTimingTypeDay][day - 1].emplace(newEntryPtr);
 }
 

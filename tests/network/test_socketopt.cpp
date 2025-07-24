@@ -18,8 +18,8 @@ void TestClient()
         return;
     }
 
-    InetAdress server("0.0.0.0:34444");
-    SocketOpt  opt(sock);
+    InetAddress server("0.0.0.0:34444");
+    SocketOpt   opt(sock);
     opt.SetNonBlocking(false);
 
     auto ret = opt.Connect(server);
@@ -45,14 +45,14 @@ void TestServer()
     }
 
     // 服务器地址
-    InetAdress server("0.0.0.0:34444");
-    SocketOpt  opt(sock);
+    InetAddress server("0.0.0.0:34444");
+    SocketOpt   opt(sock);
     opt.SetNonBlocking(false);
 
     opt.BindAddress(server);
     opt.Listen();
-    InetAdress addr;
-    auto       ns = opt.Accept(&addr);
+    InetAddress addr;
+    auto        ns = opt.Accept(&addr);
 
     CORE_DEBUG("accept ret : {}    errno :{} addr: {} ", ns, errno, addr.ToIpPort());
 }

@@ -1,7 +1,7 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-22 21:25:14
- * @LastEditTime: 2025-07-22 22:58:52
+ * @LastEditTime: 2025-07-23 11:04:53
  * @FilePath: /TMMS-SERVER/tmms/network/base/inetaddress.h
  * @Description:
  */
@@ -24,15 +24,15 @@
 
 namespace tmms::net
 {
-class InetAdress
+class InetAddress
 {
 public:
-    using ptr = std::shared_ptr<InetAdress>;
+    using ptr = std::shared_ptr<InetAddress>;
 
-    InetAdress(const std::string& ip, uint16_t port, bool bv6 = false);
-    InetAdress(const std::string& host, bool bv6 = false);
-    InetAdress()  = default;
-    ~InetAdress() = default;
+    InetAddress(const std::string& ip, uint16_t port, bool bv6 = false);
+    InetAddress(const std::string& host, bool bv6 = false);
+    InetAddress()  = default;
+    ~InetAddress() = default;
 
     // host = addr:port
     void SetHost(const std::string& host) { GetIpAndPort(host, addr_, port_); }

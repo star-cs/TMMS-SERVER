@@ -40,7 +40,7 @@ public:
     void RunInLoop(const Func&& f);
 
     // 时间轮
-    void InstertEntry(uint32_t delay, EntryPtr entryPtr); // 插入entry，设置超时时间
+    void InsertEntry(uint32_t delay, EntryPtr entryPtr); // 插入entry，设置超时时间
     void AddTimer(double s, const Func& cb, bool recurring = false);
     void AddTimer(double s, Func&& cb, bool recurring = false);
     void AddConditionTimer(double s, const Func& cb, std::weak_ptr<void> weak_cond, bool recurring = false);

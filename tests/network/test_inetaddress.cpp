@@ -16,7 +16,7 @@ int main()
     std::string host;
     while (std::cin >> host)
     {
-        InetAdress addr(host);
+        InetAddress addr(host);
         std::cout << "host:" << host << std::endl
                   << "ip:" << addr.IP() << std::endl
                   << "port:" << addr.Port() << std::endl

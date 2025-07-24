@@ -18,11 +18,7 @@ Event::Event(EventLoop* loop, int fd) : fd_(fd), loop_(loop)
 }
 Event::~Event()
 {
-    if (fd_ > 0)
-    {
-        close(fd_);
-        fd_ = -1;
-    }
+    Close();
 }
 
 void Event::OnRead()
@@ -46,9 +42,14 @@ bool Event::EnableReading(bool enable)
 {
     return loop_->EnableEventReading(shared_from_this(), enable);
 }
-int Event::Fd() const
+
+void Event::Close()
 {
-    return fd_;
+    if (fd_ > 0)
+    {
+        close(fd_);
+        fd_ = -1;
+    }
 }
 
 PipeEvent::PipeEvent(EventLoop* loop) : Event(loop)

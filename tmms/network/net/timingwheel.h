@@ -50,7 +50,7 @@ public:
     TimingWheel();
     ~TimingWheel();
 
-    void InstertEntry(uint32_t delay, EntryPtr entryPtr); // 插入entry，设置超时时间
+    void InsertEntry(uint32_t delay, EntryPtr entryPtr); // 插入entry，设置超时时间
     void OnTimer(int64_t now);
     void PopUp(Wheel& bq);
     void AddTimer(double s, const Func& cb, bool recurring = false);
@@ -59,10 +59,10 @@ public:
     void AddConditionTimer(double s, Func&& cb, std::weak_ptr<void> weak_cond, bool recurring = false);
 
 private:
-    void InstertSecondEntry(uint32_t delay, EntryPtr entryPtr);
-    void InstertMinuteEntry(uint32_t delay, EntryPtr entryPtr);
-    void InstertHourEntry(uint32_t delay, EntryPtr entryPtr);
-    void InstertDayEntry(uint32_t delay, EntryPtr entryPtr);
+    void InsertSecondEntry(uint32_t delay, EntryPtr entryPtr);
+    void InsertMinuteEntry(uint32_t delay, EntryPtr entryPtr);
+    void InsertHourEntry(uint32_t delay, EntryPtr entryPtr);
+    void InsertDayEntry(uint32_t delay, EntryPtr entryPtr);
 
     Wheels   wheels_;
     int64_t  last_ts_{0};
