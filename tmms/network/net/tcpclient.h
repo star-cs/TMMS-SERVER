@@ -1,7 +1,7 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-24 14:00:28
- * @LastEditTime: 2025-07-24 14:01:35
+ * @LastEditTime: 2025-07-25 22:42:20
  * @FilePath: /TMMS-SERVER/tmms/network/net/tcpclient.h
  * @Description:
  */
@@ -38,7 +38,7 @@ public:
     void OnWrite() override;
     void OnClose() override;
 
-    void Send(std::list<BufferNodePtr>& list);
+    void Send(std::list<BufferNode::ptr>& list);
     void Send(const char* buf, size_t size);
 
 private:

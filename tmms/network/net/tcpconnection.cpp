@@ -136,7 +136,7 @@ void TcpConnection::OnWrite()
 
 /// @brief  可能是多个线程同时发，放在同一个loop中
 /// @param list
-void TcpConnection::Send(std::list<BufferNodePtr>& list)
+void TcpConnection::Send(std::list<BufferNode::ptr>& list)
 {
     loop_->RunInLoop([this, &list] { SendInLoop(list); });
 }
