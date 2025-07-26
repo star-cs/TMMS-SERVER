@@ -1,12 +1,13 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 20:10:13
- * @LastEditTime: 2025-07-21 22:44:07
+ * @LastEditTime: 2025-07-26 12:12:47
  * @FilePath: /TMMS-SERVER/tmms/base/macro.h
  * @Description:
  */
 #pragma once
-
+#include "base/log/log.h"
+#include "base/utils/utils.h"
 #include <assert.h>
 
 #if defined __GNUC__ || defined __llvm__
@@ -22,13 +23,13 @@
 #define CORE_ASSERT(x)                                                                                                 \
     if (!(x))                                                                                                          \
     {                                                                                                                  \
-        CORE_ERROR("ASSERTION : {} \nbacktrace:\n {} ", #x, tmms::base::BacktraceToString(100, 2, "         "));        \
+        CORE_ERROR("ASSERTION : {} \nbacktrace:\n {} ", #x, tmms::base::BacktraceToString(100, 2, "         "));       \
         assert(x);                                                                                                     \
     }
 
 #define CORE_ASSERT2(x, w)                                                                                             \
     if (!(x))                                                                                                          \
     {                                                                                                                  \
-        CORE_ERROR("ASSERTION : {}\n{}\nbacktrace:\n{}", #x, w, tmms::base::BacktraceToString(100, 2, "         "));    \
+        CORE_ERROR("ASSERTION : {}\n{}\nbacktrace:\n{}", #x, w, tmms::base::BacktraceToString(100, 2, "         "));   \
         assert(x);                                                                                                     \
     }

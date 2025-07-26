@@ -1,4 +1,4 @@
-file(GLOB TEST_SOURCES "base/test_*.cpp" "network/test_*.cpp")
+file(GLOB TEST_SOURCES "base/test_*.cpp" "network/test_*.cpp" "coro_uring_net/test_*.cpp")
 
 # 遍历每个测试源文件
 foreach(TEST_SOURCE ${TEST_SOURCES})
@@ -11,15 +11,19 @@ foreach(TEST_SOURCE ${TEST_SOURCES})
     add_dependencies(${TEST_NAME} 
         tmms-base
         tmms-net
+        tmms-coro_uring_net
         libyamlcpp
         libspdlog
+        libgtest
     )
     
     target_link_libraries(${TEST_NAME}        
         tmms-base
         tmms-net
+        tmms-coro_uring_net
         libyaml-cpp.a
         libspdlog.a
+        libgtest.a
     )
 
     force_redefine_file_macro_for_sources(${TEST_NAME})

@@ -22,7 +22,7 @@ ExternalProject_Add(libyamlcpp
     INSTALL_COMMAND make -C build install -j4
 )
 
-ExternalProject_Add(jsoncpp
+ExternalProject_Add(libjsoncpp
     EXCLUDE_FROM_ALL 1
     URL https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.8.4.tar.gz
     BUILD_IN_SOURCE 1
@@ -31,3 +31,11 @@ ExternalProject_Add(jsoncpp
     INSTALL_COMMAND make -C build install -j4
 )
 
+ExternalProject_Add(libgtest
+    EXCLUDE_FROM_ALL 1
+    URL https://github.com/google/googletest/releases/download/v1.17.0/googletest-1.17.0.tar.gz
+    BUILD_IN_SOURCE 1
+    CONFIGURE_COMMAND cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${PROJECT_BINARY_DIR}
+    BUILD_COMMAND make -C build -j4
+    INSTALL_COMMAND make -C build install -j4 
+)
