@@ -1,7 +1,7 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-26 10:36:50
- * @LastEditTime: 2025-07-26 11:01:01
+ * @LastEditTime: 2025-07-26 19:41:37
  * @FilePath: /TMMS-SERVER/tmms/base/allocator/memory.hpp
  * @Description:
  */
@@ -10,14 +10,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include "base/types.hpp"
 
 namespace tmms::base
 {
-enum class memory_allocator_type : uint8_t
-{
-    std_allocator,
-    none
-};
+
 
 template<memory_allocator_type alloc_strategy>
 class memory_allocator
@@ -59,5 +56,4 @@ public:
 
     auto release(void* ptr) -> void { free(ptr); }
 };
-
 } // namespace tmms::base

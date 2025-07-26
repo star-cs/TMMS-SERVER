@@ -6,8 +6,13 @@ add_library(${LIB_NAME} ${DIR_LIB_SRCS})
 
 add_dependencies(${LIB_NAME}
     tmms-base
+    libatomic_queue
+    # liburing
 )
 
-target_link_libraries(${LIB_NAME} PUBLIC tmms-base)
+target_link_libraries(${LIB_NAME} PUBLIC 
+    tmms-base 
+    liburing.a
+)
 
 force_redefine_file_macro_for_sources(${LIB_NAME})

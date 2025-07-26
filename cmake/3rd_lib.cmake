@@ -39,3 +39,32 @@ ExternalProject_Add(libgtest
     BUILD_COMMAND make -C build -j4
     INSTALL_COMMAND make -C build install -j4 
 )
+
+ExternalProject_Add(libatomic_queue
+    EXCLUDE_FROM_ALL 1
+    URL https://github.com/max0x7ba/atomic_queue/archive/refs/tags/v1.7.1.tar.gz
+    BUILD_IN_SOURCE 1
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+)
+
+include_directories(${PROJECT_BINARY_DIR}/libatomic_queue-prefix/src/libatomic_queue/include)
+
+
+# 自己编译安装
+# ./configure --cc=gcc --cxx=g++;
+# make -j$(nproc);
+# make liburing.pc
+# sudo make install;
+
+ExternalProject_Add(liburing
+    EXCLUDE_FROM_ALL 1
+    URL https://github.com/axboe/liburing/archive/refs/tags/liburing-2.10.tar.gz
+    BUILD_IN_SOURCE 1
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+)
+
+

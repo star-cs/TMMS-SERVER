@@ -1,8 +1,8 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-26 10:25:29
- * @LastEditTime: 2025-07-26 13:14:07
- * @FilePath: /TMMS-SERVER/tmms/coro_uring_net/base/task.hpp
+ * @LastEditTime: 2025-07-26 16:20:03
+ * @FilePath: /TMMS-SERVER/tmms/coro_uring_net/net/task.hpp
  * @Description:
  */
 #pragma once
@@ -10,7 +10,7 @@
 #include "base/config/config.h"
 #include "base/macro.h"
 #include "coro_uring_net/base/container.hpp"
-#include "meta_info.hpp"
+#include "coro_uring_net/base/meta_info.hpp"
 #include <coroutine>
 #include <cstdint>
 
@@ -72,9 +72,9 @@ struct promise_base
 
     auto is_detach() -> bool { return m_state == coro_state::detach; }
 #ifdef ENABLE_MEMORY_ALLOC
-    void* operator new(std::size_t size) { return tmms::meta::ginfo.mem_alloc->allocate(size); }
+    void* operator new(std::size_t size) { return ginfo.mem_alloc->allocate(size); }
 
-    void operator delete(void* ptr, std::size_t size) { tmms::meta::ginfo.mem_alloc->release(ptr); }
+    void operator delete(void* ptr, std::size_t size) { ginfo.mem_alloc->release(ptr); }
 #endif
 
 protected:
@@ -168,7 +168,6 @@ public:
 
         auto await_suspend(std::coroutine_handle<> awaiting_coroutine) noexcept -> std::coroutine_handle<>
         {
-            // TODO[lab1]: Add you codes
             // 传入的 awaiting_coroutine 是 co_wait fun（子协程结束或suspend后）父协程的句柄
             m_coroutine.promise().continuation(awaiting_coroutine);
             return m_coroutine;
@@ -276,15 +275,13 @@ private:
     coroutine_handle m_coroutine{nullptr};
 };
 
-using coroutine_handle = std::coroutine_handle<net::promise_base>;
 
 inline auto clean(std::coroutine_handle<> handle) noexcept -> void
 {
-    // TODO[lab1]: Add you codes
     // 手动清除 句柄
     // std::coroutine_handle<detail::promise_base>::from_address(void*)
     // 接受一个内存地址，返回指向detail::promise_base类型协程的句柄
-    auto  specific_handle = coroutine_handle::from_address(handle.address());
+    auto  specific_handle = std::coroutine_handle<net::promise_base>::from_address(handle.address());
     auto& promise         = specific_handle.promise();
     switch (promise.get_state())
     {

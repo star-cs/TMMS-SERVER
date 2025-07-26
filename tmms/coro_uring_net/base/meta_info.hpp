@@ -1,14 +1,9 @@
-/*
- * @Author: star-cs
- * @Date: 2025-07-26 10:37:44
- * @LastEditTime: 2025-07-26 11:29:27
- * @FilePath: /TMMS-SERVER/tmms/meta_info.hpp
- * @Description:
- */
+#pragma once
+
 #include "base/config/config.h"
 #include <atomic>
 
-namespace tmms::meta
+namespace tmms::net
 {
 
 class context;
@@ -18,7 +13,6 @@ struct alignas(tmms::config::kCacheLineSize) local_info
 {
     context* ctx{nullptr};
     engine*  egn{nullptr};
-    // TODO: Add more local var
 };
 
 struct global_info
@@ -32,6 +26,22 @@ struct global_info
 };
 
 inline thread_local local_info linfo;
-inline global_info ginfo;
+inline global_info             ginfo;
 
-} // namespace tmms::meta
+// init global info
+inline auto init_meta_info() noexcept -> void
+{
+    ginfo.context_id = 0;
+    ginfo.engine_id  = 0;
+#ifdef ENABLE_MEMORY_ALLOC
+    ginfo.mem_alloc = nullptr;
+#endif
+}
+
+// This function is used to distinguish whether you are currently in a worker thread
+inline auto is_in_working_state() noexcept -> bool
+{
+    return linfo.ctx != nullptr;
+}
+
+} // namespace tmms::net

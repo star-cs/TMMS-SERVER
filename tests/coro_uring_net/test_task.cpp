@@ -2,7 +2,7 @@
 #include <vector>
 
 #include "base/log/log.h"
-#include "coro_uring_net/base/task.hpp"
+#include "coro_uring_net/core/task.hpp"
 #include "gtest/gtest.h"
 
 using namespace tmms::net;

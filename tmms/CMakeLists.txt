@@ -8,6 +8,7 @@ add_dependencies(tmms-live-server
     tmms-base
     libyamlcpp
     libspdlog
+    libatomic_queue
 )
 
 target_link_libraries(tmms-live-server

@@ -1,7 +1,7 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 13:57:38
- * @LastEditTime: 2025-07-22 15:02:46
+ * @LastEditTime: 2025-07-26 22:20:33
  * @FilePath: /TMMS-SERVER/tmms/base/utils/utils.cpp
  * @Description:
  */
@@ -36,7 +36,7 @@ int64_t TTime::NowMS()
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);                     // 获取精确时间到结构体
-    return tv.tv_sec * 1000 + tv.tv_usec / 1000;        // 一个是s,一个是us，换算成ms
+    return tv.tv_sec * 1000 + tv.tv_usec / 1000; // 一个是s,一个是us，换算成ms
 }
 
 /// @brief 获取当前的UTC时间
@@ -167,6 +167,21 @@ std::string BacktraceToString(int size, int skip, const std::string& prefix)
         ss << prefix << bt[i] << std::endl;
     }
     return ss.str();
+}
+
+auto set_fd_noblock(int fd) noexcept -> void
+{
+    int flags = fcntl(fd, F_GETFL, 0);
+    assert(flags >= 0);
+
+    flags |= O_NONBLOCK;
+    assert(fcntl(fd, F_SETFL, flags) >= 0);
+}
+
+auto get_null_fd() noexcept -> int
+{
+    auto fd = open("/dev/null", O_RDWR);
+    return fd;
 }
 
 } // namespace tmms::base
