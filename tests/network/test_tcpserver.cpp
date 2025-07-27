@@ -2,12 +2,13 @@
  * @Author: heart1128 1020273485@qq.com
  * @Date: 2024-06-05 16:42:13
  * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-07-25 22:27:44
+ * @LastEditTime: 2025-07-27 10:37:05
  * @FilePath: /TMMS-SERVER/tests/network/test_tcpserver.cpp
  * @Description:  learn
  */
 #include "base/log/log.h"
 #include "network/base/inetaddress.h"
+#include "network/base/text_context.h"
 #include "network/net/eventloop.h"
 #include "network/net/eventloopthread.h"
 #include "network/net/tcpserver.h"
@@ -37,20 +38,22 @@ int main()
         server.SetMessageCallback(
             [](const TcpConnectionPtr& con, MsgBuffer& buf)
             {
-                std::cout << "host : " << con->PeerAddr().ToIpPort() << "msg : " << buf.Peek() << std::endl;
-                buf.RetrieveAll();
-
-                con->Send(http_response, strlen(http_response));
+                TextContext::ptr context = con->GetContext<TextContext>(kNormalContext);
+                context->ParseMessage(buf);
             });
 
         server.SetNewConnectionCallback(
             [](const TcpConnectionPtr& con)
             {
+                TextContext::ptr context = std::make_shared<TextContext>(con);
+                con->SetContext(kNormalContext, context);
+                context->SetTestMessageCallback([](const TcpConnectionPtr& con, const std::string& msg)
+                                                { std::cout << "message : " << msg << std::endl; });
                 con->SetWriteCompleteCallback(
                     [](const TcpConnectionPtr& con)
                     {
-                        std::cout << "write complete host ： " << con->PeerAddr().ToIpPort() << std::endl;
-                        con->ForceClose();
+                        std::cout << "write complete host： " << con->PeerAddr().ToIpPort() << std::endl;
+                        // con->ForceClose();
                     });
             });
 

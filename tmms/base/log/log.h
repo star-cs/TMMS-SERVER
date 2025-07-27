@@ -1,11 +1,13 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 13:48:57
- * @LastEditTime: 2025-07-21 21:37:31
+ * @LastEditTime: 2025-07-27 14:59:15
  * @FilePath: /TMMS-SERVER/tmms/base/log/log.h
  * @Description:
  */
 #pragma once
+#include <memory>
+
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG // 启用DEBUG及以上级别
 
 #include "spdlog/spdlog.h"
@@ -22,6 +24,7 @@ public:
     static spdlog::logger* get_core_logger() { return ptr_core_logger_; }
 
     static spdlog::logger* get_hls_logger() { return ptr_hls_logger_; }
+    static spdlog::logger* get_rtmp_logger() { return ptr_rtmp_logger_; }
 
 public:
     static void init(bool debug);
@@ -29,8 +32,10 @@ public:
 private:
     static std::shared_ptr<spdlog::logger> core_logger_;
     static std::shared_ptr<spdlog::logger> hls_logger_;
+    static std::shared_ptr<spdlog::logger> rtmp_logger_;
     static spdlog::logger*                 ptr_core_logger_;
     static spdlog::logger*                 ptr_hls_logger_;
+    static spdlog::logger*                 ptr_rtmp_logger_;
 };
 
 #define CORE_TRACE(...) SPDLOG_LOGGER_TRACE(tmms::base::Log::get_core_logger(), __VA_ARGS__)
@@ -52,5 +57,12 @@ private:
 #define HLS_WARN(...)  SPDLOG_LOGGER_WARN(tmms::base::Log::get_hls_logger(), __VA_ARGS__)
 #define HLS_ERROR(...) SPDLOG_LOGGER_ERROR(tmms::base::Log::get_hls_logger(), __VA_ARGS__)
 #define HLS_FLUSH()    tmms::base::Log::get_hls_logger()->flush()
+
+#define RTMP_TRACE(...) SPDLOG_LOGGER_TRACE(tmms::base::Log::get_rtmp_logger(), __VA_ARGS__)
+#define RTMP_DEBUG(...) SPDLOG_LOGGER_DEBUG(tmms::base::Log::get_rtmp_logger(), __VA_ARGS__)
+#define RTMP_INFO(...)  SPDLOG_LOGGER_INFO(tmms::base::Log::get_rtmp_logger(), __VA_ARGS__)
+#define RTMP_WARN(...)  SPDLOG_LOGGER_WARN(tmms::base::Log::get_rtmp_logger(), __VA_ARGS__)
+#define RTMP_ERROR(...) SPDLOG_LOGGER_ERROR(tmms::base::Log::get_rtmp_logger(), __VA_ARGS__)
+#define RTMP_FLUSH()    tmms::base::Log::get_rtmp_logger()->flush()
 
 }; // namespace tmms::base

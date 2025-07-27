@@ -1,3 +1,10 @@
+/*
+ * @Author: star-cs
+ * @Date: 2025-07-23 15:19:08
+ * @LastEditTime: 2025-07-27 10:17:28
+ * @FilePath: /TMMS-SERVER/tmms/network/net/connection.h
+ * @Description:
+ */
 #pragma once
 
 #include "network/base/inetaddress.h"
@@ -9,7 +16,7 @@ namespace tmms::net
 {
 enum
 {
-    kNoirmalContext = 0,
+    kNormalContext = 0,
     kRtmpContext, // rtmp
     kHttpContext, // http
     kUserContext,
@@ -33,6 +40,7 @@ public:
     void               SetPeerAddr(const InetAddress& peer) { peer_addr_ = peer; }
     const InetAddress& LocalAddr() const { return local_addr_; }
     const InetAddress& PeerAddr() const { return peer_addr_; }
+
     //////// 上下文相关
     void SetContext(int type, const std::shared_ptr<void>& context) { contexts_[type] = context; } // 设置上下文
     void SetContext(int type, const std::shared_ptr<void>&& context)                               // 设置上下文
@@ -48,7 +56,7 @@ public:
         {
             return std::shared_ptr<T>();
         }
-        return std::dynamic_pointer_cast<T>(iter->second);
+        return std::static_pointer_cast<T>(iter->second);
     }
 
     void ClearContext(int type) { contexts_[type].reset(); }

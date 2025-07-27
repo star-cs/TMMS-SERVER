@@ -1,49 +1,47 @@
 /*
- * @Author: heart1128 1020273485@qq.com
- * @Date: 2024-06-05 16:42:13
- * @LastEditors: Please set LastEditors
- * @LastEditTime: 2025-07-27 10:20:27
- * @FilePath: /TMMS-SERVER/tests/network/test_tcpclient.cpp
- * @Description:  learn
+ * @Author: star-cs
+ * @Date: 2025-07-27 19:09:14
+ * @LastEditTime: 2025-07-27 19:18:45
+ * @FilePath: /TMMS-SERVER/tests/mmedia/test_handshakeclient.cpp
+ * @Description:
  */
-#include "base/log/log.h"
 
+#include "mmedia/rtmp/rtmp_hand_shake.h"
 #include "network/base/inetaddress.h"
-#include "network/net/eventloop.h"
 #include "network/net/eventloopthread.h"
 #include "network/net/tcpclient.h"
-
-#include <chrono>
+#include "network/net/tcpconnection.h"
 #include <iostream>
-#include <thread>
+#include <memory>
 
 using namespace tmms::net;
-using namespace tmms::base;
+using namespace tmms::mm;
 
 EventLoopThread eventloop_thread;
-std::thread     th;
 
-const char* http_request  = "GET / HTTP/1.0\r\nHost: 127.0.0.1\r\nAccept: */*\r\nContent-Length: 0\r\n\r\n";
+std::thread th;
+
+const char* http_request  = "GET / HTTP/1.0\r\nHost: 10.101.128.69\r\nAccept: */*\r\nContent-Length: 0\r\n\r\n";
 const char* http_response = "HTTP/1.0 200 OK\r\nServer: tmms\r\nContent-Type: text/html\r\nContent-Length: 0\r\n\r\n";
 
 int main()
 {
-    Log::init(true);
     eventloop_thread.Run();
+
     EventLoop* loop = eventloop_thread.Loop();
 
     if (loop)
     {
-        InetAddress server("127.0.0.1:34444");
-        // 继承了std::enable_shared_from_this<Event>必须使用智能指针
+        InetAddress server("127.0.0.1:1935");
+
         std::shared_ptr<TcpClient> client = std::make_shared<TcpClient>(loop, server);
+
         client->SetRecvMsgCallback(
             [](const TcpConnectionPtr& con, MsgBuffer& buf)
             {
-                std::cout << "host : " << con->PeerAddr().ToIpPort() << "msg : " << buf.Peek() << std::endl;
-                buf.RetrieveAll();
-
-                con->Send(http_response, strlen(http_response));
+                RtmpHandShake::ptr shake = con->GetContext<RtmpHandShake>(kNormalContext);
+                // 每次收到消息就进行回调
+                shake->HandShake(buf);
             });
 
         client->SetCloseCallback(
@@ -61,19 +59,22 @@ int main()
                 if (con)
                 {
                     std::cout << "host: " << con->PeerAddr().ToIpPort() << " write complete" << std::endl;
+                    RtmpHandShake::ptr shake = con->GetContext<RtmpHandShake>(kNormalContext);
+                    shake->WriteComplete();
                 }
             });
-
         client->SetConnectCallback(
             [](const TcpConnectionPtr& con, bool connected)
             {
                 if (connected)
                 {
-                    auto size = htonl(strlen(http_request));
-                    con->Send((const char*)&size, sizeof(size));
-                    con->Send(http_request, strlen(http_request));
+                    RtmpHandShake::ptr shake = std::make_shared<RtmpHandShake>(con, true);
+                    con->SetContext(kNormalContext, shake);
+                    // 开始客户端发送C0C1
+                    shake->Start();
                 }
             });
+            
         client->Connect();
 
         while (1)
@@ -81,6 +82,4 @@ int main()
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
     }
-
-    return 0;
 }

@@ -7,7 +7,7 @@
  */
 #include <cstdlib>
 
-#include "coro_uring_net/io/net/tcp/tcp.hpp"
+#include "coro_uring_net/io/tcp/tcp.hpp"
 #include "base/log/log.h"
 
 namespace tmms::net::tcp

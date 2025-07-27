@@ -1,7 +1,7 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 13:55:39
- * @LastEditTime: 2025-07-26 22:20:18
+ * @LastEditTime: 2025-07-27 09:48:03
  * @FilePath: /TMMS-SERVER/tmms/base/utils/utils.h
  * @Description:
  */
@@ -43,7 +43,6 @@ void Backtrace(std::vector<std::string>& bt, int size = 64, int skip = 1);
  */
 std::string BacktraceToString(int size = 64, int skip = 2, const std::string& prefix = "");
 
-
 /**
  * @brief set the fd noblock
  *
@@ -57,7 +56,6 @@ auto set_fd_noblock(int fd) noexcept -> void;
  * @return int
  */
 auto get_null_fd() noexcept -> int;
-
 
 inline auto sleep(int64_t t) noexcept -> void
 {
