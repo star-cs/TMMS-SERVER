@@ -1,14 +1,13 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-27 14:51:55
- * @LastEditTime: 2025-07-27 19:04:48
+ * @LastEditTime: 2025-07-28 12:41:41
  * @FilePath: /TMMS-SERVER/tmms/mmedia/rtmp/rtmp_hand_shake.cpp
  * @Description:
  */
 #include "mmedia/rtmp/rtmp_hand_shake.h"
 #include "base/log/log.h"
 #include "base/utils/utils.h"
-#include "mmedia/rtmp/rtmphandshake.h"
 #include <cstring>
 #include <random>
 
@@ -130,14 +129,14 @@ void RtmpHandShake::Start()
 
 /// @brief 服务端和客户端的接收流程
 /// @param buf
-/// @return 1表示数据不够，接着发送；-1表示检测失败；2表示客户端收到了连续的S0S1S2；0成功
+/// @return 1表示数据不够，接着发送；-1表示检测失败；2表示中间状态；0成功
 int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
 {
     switch (state_)
     {
         case kHandShakeWaitC0C1: // 服务端等待客户端发送C0C1，收到就是进行检测，处理，然后发送S0S1
         {
-            if (buf.ReadableBytes() < 1537) // 数据不够C0C1 / S0S1
+            if (buf.ReadableBytes() < kRtmpHandShakePacketSize + 1) // 数据不够C0C1 / S0S1
             {
                 return 1;
             }
@@ -151,6 +150,7 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
                 buf.Retrieve(kRtmpHandShakePacketSize + 1);
                 state_ = kHandShakePostS0S1;
                 SendC1S1(); // S0S1
+                return 2;
             }
             else
             {
@@ -171,6 +171,7 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
                 buf.Retrieve(kRtmpHandShakePacketSize);
                 RTMP_TRACE("host:{} handshake done", connection_->PeerAddr().ToIpPort());
                 state_ = kHandShakeDone;
+                return 0;
             }
             else
             {
@@ -205,6 +206,7 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
                 {
                     state_ = kHandShakePostC2; // 状态变了，因为没有收到S2，就是准备发送C2的状态
                     SendC2S2();
+                    return 2;
                 }
             }
             else

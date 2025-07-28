@@ -1,14 +1,14 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 13:48:57
- * @LastEditTime: 2025-07-27 14:59:15
+ * @LastEditTime: 2025-07-28 12:07:26
  * @FilePath: /TMMS-SERVER/tmms/base/log/log.h
  * @Description:
  */
 #pragma once
 #include <memory>
 
-#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_DEBUG // 启用DEBUG及以上级别
+#define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE // 启用DEBUG及以上级别
 
 #include "spdlog/spdlog.h"
 

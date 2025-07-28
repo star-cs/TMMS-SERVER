@@ -67,4 +67,9 @@ ExternalProject_Add(liburing
     INSTALL_COMMAND ""
 )
 
+find_package(OpenSSL REQUIRED)
+message(${OPENSSL_CRYPTO_LIBRARY})
+message(${OPENSSL_SSL_LIBRARY})
+
+include_directories(${OPENSSL_INCLUDE_DIR})
 

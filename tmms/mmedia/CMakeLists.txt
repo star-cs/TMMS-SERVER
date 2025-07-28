@@ -9,6 +9,6 @@ add_dependencies(${LIB_NAME}
     tmms-net
 )
 
-target_link_libraries(${LIB_NAME} PUBLIC tmms-base tmms-net)
+target_link_libraries(${LIB_NAME} PUBLIC tmms-base tmms-net ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_SSL_LIBRARY})
 
 force_redefine_file_macro_for_sources(${LIB_NAME})

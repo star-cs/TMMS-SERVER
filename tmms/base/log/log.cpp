@@ -1,7 +1,7 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-21 13:49:31
- * @LastEditTime: 2025-07-27 14:47:54
+ * @LastEditTime: 2025-07-28 12:07:52
  * @FilePath: /TMMS-SERVER/tmms/base/log/log.cpp
  * @Description:
  */
@@ -31,7 +31,7 @@ void Log::init(bool debug)
 {
     if (debug)
     {
-        spdlog::set_level(spdlog::level::debug);
+        spdlog::set_level(spdlog::level::trace);
 
         core_logger_     = spdlog::stdout_color_mt("core");
         hls_logger_      = spdlog::stdout_color_mt("hls");
