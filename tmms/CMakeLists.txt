@@ -1,7 +1,6 @@
 add_subdirectory(base)
 add_subdirectory(network)
 add_subdirectory(mmedia)
-add_subdirectory(coro_uring_net)
 
 add_executable(tmms-live-server main.cpp)
 
