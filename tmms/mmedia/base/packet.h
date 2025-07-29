@@ -24,9 +24,9 @@ class Packet
 {
 public:
     using ptr = std::shared_ptr<Packet>;
-    Packet(int32_t size);
+    Packet(int32_t size) : size_(size) {}
 
-    ~Packet();
+    ~Packet() {}
 
     static Packet::ptr NewPacket(int32_t size);
 
@@ -40,7 +40,7 @@ public:
     bool IsMeta() const { return type_ == kPacketTypeMeta; }
     bool IsMeta3() const { return type_ == kPacketTypeMeta3; }
 
-    int32_t PakcetSize() const { return size_; }
+    int32_t PacketSize() const { return size_; }
     int     Space() const // 剩余空间
     {
         return capacity_ - size_;
@@ -77,4 +77,5 @@ private:
 };
 #pragma pack(pop)
 
+using PacketPtr = std::shared_ptr<Packet>;
 } // namespace tmms::mm

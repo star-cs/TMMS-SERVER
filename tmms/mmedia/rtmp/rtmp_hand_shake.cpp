@@ -150,7 +150,6 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
                 buf.Retrieve(kRtmpHandShakePacketSize + 1);
                 state_ = kHandShakePostS0S1;
                 SendC1S1(); // S0S1
-                return 2;
             }
             else
             {
@@ -200,13 +199,12 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
                     state_ = kHandShakeDoning; // 等待C2发送完
                     buf.Retrieve(kRtmpHandShakePacketSize);
                     SendC2S2();
-                    return 2;
+                    return 0;
                 }
                 else
                 {
                     state_ = kHandShakePostC2; // 状态变了，因为没有收到S2，就是准备发送C2的状态
                     SendC2S2();
-                    return 2;
                 }
             }
             else
@@ -217,7 +215,7 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
             break;
         }
     }
-    return 0;
+    return 1;
 }
 
 /// @brief 客户端和服务端的发送完成状态

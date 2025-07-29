@@ -1,12 +1,13 @@
 /*
  * @Author: star-cs
  * @Date: 2025-07-27 20:58:33
- * @LastEditTime: 2025-07-27 21:00:25
+ * @LastEditTime: 2025-07-28 15:04:21
  * @FilePath: /TMMS-SERVER/tmms/mmedia/rtmp/rtmp_hander.h
  * @Description:
  */
 #pragma once
 
+#include <memory>
 namespace tmms::mm
 {
 // 常用的message type，都是规定好的
@@ -50,7 +51,18 @@ enum RtmpCSID
 #define kRtmpMsID0 0
 #define kRtmpMsID1 1
 
-#pragma pack(push, 1)
+#pragma pack(push, 1) // 单字节对齐，节省空间
+struct RtmpMsgHeader
+{
+    uint32_t cs_id{0};     /* chunk stream id */
+    uint32_t timestamp{0}; /* timestamp (delta) */
+    uint32_t msg_len{0};   /* message length */
+    uint8_t  msg_type{0};  /* message type id */
+    uint32_t msg_sid{0};   /* message stream id */
+    RtmpMsgHeader() : cs_id(0), timestamp(0), msg_len(0), msg_type(0), msg_sid(0) {}
+};
 #pragma pack(pop)
+
+using RtmpMsgHeaderPtr = std::shared_ptr<RtmpMsgHeader>;
 
 } // namespace tmms::mm

@@ -44,12 +44,9 @@ void RtmpServer::OnNewConnection(const TcpConnectionPtr& conn)
         rtmp_handler_->OnNewConnection(conn);
     }
     // 2. 处理rtmp服务端连接
-    RtmpHandShake::ptr shake = std::make_shared<RtmpHandShake>(conn, false);
-    conn->SetContext(kRtmpContext, shake);
-    shake->Start();
-    // RtmpContext::ptr shake = std::make_shared<RtmpContext>(conn, nullptr);
-    // conn->SetContext(kRtmpContext, shake);
-    // shake->StarHandShake(); // 等待C0C1
+    RtmpContextPtr context = std::make_shared<RtmpContext>(conn, nullptr);
+    conn->SetContext(kRtmpContext, context);
+    context->StarHandShake(); // 等待C0C1
 }
 
 void RtmpServer::OnConnectionDestroy(const TcpConnectionPtr& conn)
@@ -63,27 +60,29 @@ void RtmpServer::OnConnectionDestroy(const TcpConnectionPtr& conn)
 
 void RtmpServer::OnMessage(const TcpConnectionPtr& conn, MsgBuffer& buf)
 {
-    auto shake = conn->GetContext<RtmpHandShake>(kRtmpContext);
-    if (shake)
+    RtmpContextPtr context = conn->GetContext<RtmpContext>(kRtmpContext);
+    if (context)
     {
-        auto ret = shake->HandShake(buf);
-        if (ret == 0)
+        int ret = context->Parse(buf); // 开始握手
+        if (ret == 0)                // 0握手成功
         {
-            RTMP_TRACE("host: {} handshake success", conn->PeerAddr().ToIpPort());
+            RTMP_DEBUG("host:{} handshake success.", conn->PeerAddr().ToIpPort());
         }
-        else if (ret == -1)
+        else if (ret == -1) // -1失败
         {
             conn->ForceClose();
         }
     }
 }
 
+/// @brief 写完成之后，就要改变握手状态机的状态
+/// @param conn
 void RtmpServer::OnWriteComplete(const ConnectionPtr& conn)
 {
-    auto shake = conn->GetContext<RtmpHandShake>(kRtmpContext);
+    RtmpContextPtr shake = conn->GetContext<RtmpContext>(kRtmpContext);
     if (shake)
     {
-        shake->WriteComplete();
+        shake->OnWriteComplete(); // 运转状态机
     }
 }
 

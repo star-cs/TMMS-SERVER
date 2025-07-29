@@ -55,7 +55,7 @@ public:
     using ptr = std::shared_ptr<RtmpHandShake>;
     
     // 因为要区分服务端和客户端
-    RtmpHandShake(const TcpConnection::ptr& conn, bool client);
+    RtmpHandShake(const TcpConnectionPtr& conn, bool client);
     ~RtmpHandShake() = default;
     void Start();
 
