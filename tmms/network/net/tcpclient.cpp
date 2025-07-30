@@ -74,7 +74,7 @@ void TcpClient::OnClose()
 
 /// @brief 发送一个buffer的list，通过TcoConnection发送即可
 /// @param list
-void TcpClient::Send(std::list<BufferNode::ptr>& list)
+void TcpClient::Send(std::list<BufferNodePtr>& list)
 {
     if (status_ == kTcpConStatusConnected)
     {

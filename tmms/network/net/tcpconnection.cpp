@@ -136,7 +136,7 @@ void TcpConnection::OnWrite()
 
 /// @brief  可能是多个线程同时发，放在同一个loop中
 /// @param list
-void TcpConnection::Send(std::list<BufferNode::ptr>& list)
+void TcpConnection::Send(std::list<BufferNodePtr>& list)
 {
     loop_->RunInLoop([this, &list] { SendInLoop(list); });
 }
@@ -169,7 +169,7 @@ void TcpConnection::SetTimeoutCallback(int timeout, TimeoutCallback&& cb)
 void TcpConnection::EnableCheckIdleTimeout(int32_t max_time)
 {
     auto tp = std::make_shared<TimeoutEntry>(std::dynamic_pointer_cast<TcpConnection>(shared_from_this()));
- 
+
     max_idle_time_ = max_time;
 
     timeout_entry_ = tp;
@@ -232,7 +232,7 @@ void TcpConnection::SendInLoop(const char* buf, size_t size)
         EnableWriting(true);
     }
 }
-void TcpConnection::SendInLoop(std::list<BufferNode::ptr>& list)
+void TcpConnection::SendInLoop(std::list<BufferNodePtr>& list)
 {
     if (closed_)
     {

@@ -23,6 +23,7 @@ struct BufferNode // buffer的存储节点
     size_t size{0};
 };
 
+using BufferNodePtr = std::shared_ptr<BufferNode>;
 
 class TcpConnection : public Connection
 {
@@ -49,7 +50,7 @@ public:
     void SetWriteCompleteCallback(const WriteCompleteCallback& cb) { write_complete_cb_ = cb; }
     void SetWriteCompleteCallback(WriteCompleteCallback&& cb) { write_complete_cb_ = std::move(cb); }
 
-    void Send(std::list<BufferNode::ptr>& list); // 传多个buffer
+    void Send(std::list<BufferNodePtr>& list); // 传多个buffer
     void Send(const char* buf, size_t size);   // 发送单个buffer
                                                // 超时事件
     void OnTimeout();
@@ -57,21 +58,21 @@ public:
     // 伪闭包，传入智能指针，timeout之间内，保证生命周期
     void SetTimeoutCallback(int timeout, const TimeoutCallback& cb);
     void SetTimeoutCallback(int timeout, TimeoutCallback&& cb);
-    
+
     void EnableCheckIdleTimeout(int32_t max_time);
 
     void OnError(const std::string& msg) override;
 
 private:
     void SendInLoop(const char* buf, size_t size);
-    void SendInLoop(std::list<BufferNode::ptr>& list);
+    void SendInLoop(std::list<BufferNodePtr>& list);
 
     void ExtendLife(); // 延长timeout的生命周期
 
     bool                    closed_{false};
     CloseConnectionCallback close_cb_;
-    MsgBuffer               message_buffer_;    // 读数据的缓存
-    MessageCallback         message_cb_; // 参数表示，哪个连接，使用的哪个buffer
+    MsgBuffer               message_buffer_; // 读数据的缓存
+    MessageCallback         message_cb_;     // 参数表示，哪个连接，使用的哪个buffer
 
     std::vector<struct iovec> io_vec_list_; // 发送数据的缓存
     WriteCompleteCallback     write_complete_cb_;
