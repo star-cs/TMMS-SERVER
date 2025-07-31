@@ -10,6 +10,7 @@
 #include "mmedia/base/bytes_reader.h"
 #include "mmedia/base/bytes_writer.h"
 #include "mmedia/base/packet.h"
+#include "mmedia/rtmp/amf/amf_object.h"
 #include "mmedia/rtmp/rtmp_hand_shake.h"
 #include "mmedia/rtmp/rtmp_hander.h"
 #include "network/net/tcpconnection.h"
@@ -154,6 +155,7 @@ int32_t RtmpContext::ParseMessage(MsgBuffer& buf)
         if (fmt == kRtmpFmt0)
         {
             // timestamp 是前3字节
+            ts = BytesReader::ReadUint24T(pos + parsed);
             parsed += 3;
             // fmt=0的时候，存的timestamp是绝对时间，所以时间差为0。
             // 其他两个存的是和上一个chunk的时间差
@@ -300,6 +302,16 @@ void RtmpContext::MessageComplete(Packet::ptr&& data)
         case kRtmpMsgTypeWindowACKSize:
         {
             HandleAckWindowSize(data);
+            break;
+        }
+        case kRtmpMsgTypeAMFMessage:
+        {
+            HandleAmfCommand(data, false);
+            break;
+        }
+        case kRtmpMsgTypeAMF3Message:
+        {
+            HandleAmfCommand(data, true);
             break;
         }
         default:
@@ -943,6 +955,29 @@ void RtmpContext::HandleUserMessage(PacketPtr& packet)
         default:
             break;
     }
+}
+
+// AMF相关
+void RtmpContext::HandleAmfCommand(PacketPtr& data, bool amf3)
+{
+    RTMP_TRACE("amf message len:{}, host:{}", data->PacketSize(), connection_->PeerAddr().ToIpPort());
+
+    const char* body    = data->Data();
+    int32_t     msg_len = data->PacketSize();
+
+    // amf3在开头多了一个字节，表示是amf3，剩下的就是amf0
+    if (amf3)
+    {
+        body += 1;
+        msg_len -= 1;
+    }
+    AMFObject obj;
+    if (obj.Decode(body, msg_len) < 0)
+    {
+        RTMP_TRACE("amf decode error. host:{}", connection_->PeerAddr().ToIpPort());
+        return;
+    }
+    obj.Dump();
 }
 
 } // namespace tmms::mm

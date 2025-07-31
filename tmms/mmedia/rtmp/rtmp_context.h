@@ -68,6 +68,9 @@ public:
     void HandleAckWindowSize(PacketPtr& packet);
     void HandleUserMessage(PacketPtr& packet);
 
+    // AMF相关
+    void HandleAmfCommand(PacketPtr& data, bool amf3);
+
 private:
     bool BuildChunk(PacketPtr&& packet, uint32_t timestamp = 0, bool fmt0 = false);
     void CheckAndSend();
