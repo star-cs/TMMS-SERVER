@@ -7,13 +7,16 @@
  */
 #include "rtmp_context.h"
 #include "base/log/log.h"
+#include "base/utils/stringutils.h"
 #include "mmedia/base/bytes_reader.h"
 #include "mmedia/base/bytes_writer.h"
 #include "mmedia/base/packet.h"
+#include "mmedia/rtmp/amf/amf_any.h"
 #include "mmedia/rtmp/amf/amf_object.h"
 #include "mmedia/rtmp/rtmp_hand_shake.h"
 #include "mmedia/rtmp/rtmp_hander.h"
 #include "network/net/tcpconnection.h"
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -25,6 +28,14 @@ RtmpContext::RtmpContext(const TcpConnectionPtr& con, RtmpHandler* handler, bool
       connection_(con),
       rtmp_handler_(handler)
 {
+    // 设置 命令处理函数
+    commands_["connect"]      = std::bind(&RtmpContext::HandleConnect, this, std::placeholders::_1);
+    commands_["createStream"] = std::bind(&RtmpContext::HandleCreateStream, this, std::placeholders::_1);
+    commands_["_result"]      = std::bind(&RtmpContext::HandleResult, this, std::placeholders::_1);
+    commands_["_error"]       = std::bind(&RtmpContext::HandleError, this, std::placeholders::_1);
+    commands_["play"]         = std::bind(&RtmpContext::HandlePlay, this, std::placeholders::_1);
+    commands_["publish"]      = std::bind(&RtmpContext::HandlePublish, this, std::placeholders::_1);
+    out_current_              = out_buffer_;
 }
 
 /// @brief 状态机解析rtmp头
@@ -314,6 +325,19 @@ void RtmpContext::MessageComplete(Packet::ptr&& data)
             HandleAmfCommand(data, true);
             break;
         }
+        case kRtmpMsgTypeAMFMeta: // 都是一样的转换视频
+        case kRtmpMsgTypeAMF3Meta:
+        case kRtmpMsgTypeAudio: // 音频
+        case kRtmpMsgTypeVideo: // 视频
+        {
+            SetPacketType(data); // 转换类型
+            // 给业务层包，数据已经解析过了
+            if (rtmp_handler_)
+            {
+                rtmp_handler_->OnRecv(connection_, std::move(data));
+            }
+            break;
+        }
         default:
             RTMP_ERROR("not surpport message type:{}", type);
             break;
@@ -522,7 +546,6 @@ bool RtmpContext::BuildChunk(PacketPtr&& packet, uint32_t timestamp, bool fmt0)
     RtmpMsgHeaderPtr header = packet->Ext<RtmpMsgHeader>();
     if (header)
     {
-        out_sending_packets_.emplace_back(std::move(packet));
         RtmpMsgHeaderPtr& prev = out_message_headers_[header->cs_id]; // 取出前一个发送的消息头
         // 不是fmt0的条件
         // 1. 不指定 fmt0 = false
@@ -680,6 +703,7 @@ bool RtmpContext::BuildChunk(PacketPtr&& packet, uint32_t timestamp, bool fmt0)
                 break;
             }
         }
+        out_sending_packets_.emplace_back(std::move(packet));
         return true;
     }
     return false;
@@ -977,7 +1001,424 @@ void RtmpContext::HandleAmfCommand(PacketPtr& data, bool amf3)
         RTMP_TRACE("amf decode error. host:{}", connection_->PeerAddr().ToIpPort());
         return;
     }
-    obj.Dump();
+    // obj.Dump();
+
+    // 获取消息命令名称，在封装的时候把name写在了amf的第一个
+    const std::string& cmd = obj.Property(0)->String();
+    RTMP_TRACE("amf command:{} host:{}", cmd, connection_->PeerAddr().ToIpPort());
+
+    auto iter = commands_.find(cmd);
+    if (iter == commands_.end())
+    {
+        RTMP_TRACE("command not found:{} host:{}", cmd, connection_->PeerAddr().ToIpPort());
+        return;
+    }
+    iter->second(obj);
+}
+
+// NetConnection相关 服务端和客户端之间进行网络连接的高级表现形式
+void RtmpContext::SendConnect()
+{
+    PacketPtr        packet = Packet::NewPacket(1024);
+    RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
+    header->msg_sid         = 0;
+    header->msg_type        = kRtmpMsgTypeAMFMessage; // AMF0，消息使用AMF序列化
+    packet->SetExt(header);
+
+    char* body = packet->Data();
+    char* p    = body;
+
+    // 消息体
+    p += AMFObject::EncodeString(p, "connect");
+    p += AMFObject::EncodeNumber(p, 1.0);
+    *p++ = kAMFObject;
+    // command object
+    p += AMFObject::EncodeNamedString(p, "app", app_);     // 推流点
+    p += AMFObject::EncodeNamedString(p, "tcUrl", tcUrl_); // 推流地址
+    p += AMFAny::EncodeNamedBoolean(p, "fpad", false);     //
+    p += AMFAny::EncodeNamedNumber(p, "capabilities", 31.0);
+    p += AMFAny::EncodeNamedNumber(p, "audioCodecs", 1639.0); // 可以支持的音频类型，二进制1表示
+    p += AMFAny::EncodeNamedNumber(p, "videoCodecs", 252.0);  // 同样可支持的视频编码类型
+    p += AMFAny::EncodeNamedNumber(p, "videoFunction", 1.0);
+
+    // 对象类型结束 0x00 0x00 0x09
+    *p++ = 0x00;
+    *p++ = 0x00; // AMF
+    *p++ = 0x09;
+
+    // 设置包长度
+    header->msg_len = p - body;
+    packet->SetPacketSize(header->msg_len);
+    RTMP_TRACE("send connect msg_len: {}  host:{}", header->msg_len, connection_->PeerAddr().ToIpPort());
+
+    // 加入到待编码的队列中
+    PushOutQueue(std::move(packet));
+}
+
+void RtmpContext::HandleConnect(AMFObject& obj)
+{
+    auto amf3 = false;
+    // 获取command object，在第二个位置（0开始）
+    AMFObjectPtr sub_obj = obj.Property(2)->Object();
+    if (sub_obj)
+    {
+        app_   = sub_obj->Property("app")->String();
+        tcUrl_ = sub_obj->Property("tcUrl")->String();
+        if (sub_obj->Property("objectEncoding"))
+        {
+            amf3 = sub_obj->Property("objectEncoding")->Number() == 3.0;
+        }
+    }
+
+    RTMP_TRACE("recv connect tcUrl:{} app:{} amf3:{}", tcUrl_, app_, amf3);
+
+    // 服务端收到 new connect，需要 按顺序 发送三类控制消息初始化连接参数
+    SendAckWindowsSize();   // 窗口确认大小
+    SendSetPeerBandwidth(); // 设置对端带宽
+    SendSetChunkSize();     // 设置chunkSize
+
+    PacketPtr        packet = Packet::NewPacket(1024);
+    RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
+
+    header->cs_id    = kRtmpCSIDAMFIni; //
+    header->msg_sid  = 0;               // 固定的值在connect中
+    header->msg_len  = 0;
+    header->msg_type = kRtmpMsgTypeAMFMessage; // AMF0，消息使用AMF序列化
+
+    packet->SetExt(header);
+
+    char* body = packet->Data();
+    char* p    = body;
+
+    p += AMFAny::EncodeString(p, "_result"); // 出错回复_error, 正常回复_result
+    p += AMFAny::EncodeNumber(p, 1.0);
+
+    *p++ = kAMFObject;
+    p += AMFAny::EncodeNamedString(p, "fmsVer", "FMS/3,0,1,123"); // 版本号
+    p += AMFAny::EncodeNamedNumber(p, "capabilities", 31);
+    *p++ = 0x00;
+    *p++ = 0x00;
+    *p++ = 0x09;
+
+    *p++ = kAMFObject;
+    p += AMFAny::EncodeNamedString(p, "level", "status");
+    p += AMFAny::EncodeNamedString(p, "code", "NetConnection.Connect.Success"); // 连接成功
+    p += AMFAny::EncodeNamedString(p, "description", "Connection succeeded.");
+    p += AMFAny::EncodeNamedNumber(p, "objectEncoding", amf3 ? 3.0 : 0);
+    *p++ = 0x00;
+    *p++ = 0x00;
+    *p++ = 0x09;
+
+    header->msg_len = p - body;
+    packet->SetPacketSize(header->msg_len);
+
+    RTMP_TRACE("response connect result msg_len:{} host:{}", header->msg_len, connection_->PeerAddr().ToIpPort());
+
+    // 加入到待编码的队列中
+    PushOutQueue(std::move(packet));
+}
+
+/// @brief 发送给客户端通知，创建了一个NetStream,客户端收到发起play命令
+void RtmpContext::SendCreateStream()
+{
+    PacketPtr        packet = Packet::NewPacket(1024);
+    RtmpMsgHeaderPtr header = std::shared_ptr<RtmpMsgHeader>();
+
+    header->cs_id    = kRtmpCSIDAMFIni;
+    header->msg_sid  = 0;
+    header->msg_len  = 0;
+    header->msg_type = kRtmpMsgTypeAMFMessage;
+    packet->SetExt(header);
+
+    char* body = packet->Data();
+    char* p    = body;
+
+    p += AMFAny::EncodeString(p, "createStream");
+    p += AMFAny::EncodeNumber(p, 4.0);
+    *p++ = kAMFNull;
+
+    header->msg_len = p - body;
+    packet->SetPacketSize(header->msg_len);
+    RTMP_TRACE("send create stream msg_len:{} host:{}", header->msg_len, connection_->PeerAddr().ToIpPort());
+
+    PushOutQueue(std::move(packet));
+}
+
+void RtmpContext::HandleCreateStream(AMFObject& obj)
+{
+    auto tran_id = obj.Property(1)->Number();
+
+    PacketPtr        packet = Packet::NewPacket(1024);
+    RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
+    header->cs_id           = kRtmpCSIDAMFIni;
+    header->msg_sid         = 0;
+    header->msg_len         = 0;
+    header->msg_type        = kRtmpMsgTypeAMFMessage;
+    packet->SetExt(header);
+
+    char* body = packet->Data();
+    char* p    = body;
+
+    p += AMFAny::EncodeString(p, "_result");
+    p += AMFAny::EncodeNumber(p, tran_id);
+    *p++ = kAMFNull;
+
+    p += AMFAny::EncodeNumber(p, kRtmpMsID1);
+
+    header->msg_len = p - body;
+    packet->SetPacketSize(header->msg_len);
+
+    RTMP_TRACE("response create stream msg_len:{} host:{}", header->msg_len, connection_->PeerAddr().ToIpPort());
+
+    PushOutQueue(std::move(packet));
+}
+
+/// @brief NetStream的csid固定为3，ms_id固定为1.类型是20。服务端收到play命令，执行play操作，发送onstatus通知
+/// @param level
+/// @param code
+/// @param description
+void RtmpContext::SendStatus(const std::string& level, const std::string& code, const std::string& description)
+{
+    PacketPtr        packet = Packet::NewPacket(1024);
+    RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
+    header->cs_id           = kRtmpCSIDAMFIni; // 使用AMF的初始化，固定为3
+    header->msg_sid         = 1;               // 固定值
+    header->msg_len         = 0;
+    header->msg_type        = kRtmpMsgTypeAMFMessage; // AMF0，消息使用AMF序列化
+    packet->SetExt(header);
+
+    char* body = packet->Data();
+    char* p    = body;
+
+    // 设置消息体
+    p += AMFAny::EncodeString(p, "onStatus"); // command Name
+    p += AMFAny::EncodeNumber(p, 0);          // Transaction ID 固定的0
+    *p++ = kAMFNull;
+    *p++ = kAMFObject;
+    // command object
+    p += AMFAny::EncodeNamedString(p, "level", level);
+    p += AMFAny::EncodeNamedString(p, "code", code);
+    p += AMFAny::EncodeNamedString(p, "description", description);
+
+    *p++ = 0x00;
+    *p++ = 0x00; // AMF
+    *p++ = 0x09;
+
+    // 设置包长度
+    header->msg_len = p - body;
+    packet->SetPacketSize(header->msg_len);
+    RTMP_TRACE(
+        "send status level:{} code:{} description:{} host:{}",
+        level,
+        code,
+        description,
+        connection_->PeerAddr().ToIpPort());
+
+    // 加入到待编码的队列中
+    PushOutQueue(std::move(packet));
+}
+
+void RtmpContext::SendPlay() // 客户端拉流使用
+{
+    PacketPtr        packet = Packet::NewPacket(1024);
+    RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
+    header->cs_id           = kRtmpCSIDAMFIni; // 使用AMF的初始化，固定为3
+    header->msg_sid         = 1;               // netStream的命令固定为1
+    header->msg_len         = 0;
+    header->msg_type        = kRtmpMsgTypeAMFMessage; // AMF0，消息使用AMF序列化
+    packet->SetExt(header);
+
+    char* body = packet->Data();
+    char* p    = body;
+
+    // 设置消息体
+    p += AMFAny::EncodeString(p, "play"); // command Name
+    p += AMFAny::EncodeNumber(p, 0);      // Transaction ID 固定的
+    *p++ = kAMFNull;                      // 空值
+    p += AMFAny::EncodeString(p, name_);
+
+    /**
+    Start
+    用于指定开始时间（以秒为单位）。默认值为
+    -2，表示订阅者首先尝试播放“流名称”字段中指定的直播流。如果未找到同名的直播流，则播放同名的录制流。如果没有找到同名的录制流，则订阅者将等待新的同名直播流，并在可用时播放。如果在“开始”字段中传递
+    -1，则仅播放“流名称”字段中指定的直播流。如果在“开始”字段中传递 0
+    或正数，则从“开始”字段中指定的时间开始播放“流名称”字段中指定的录制流。如果未找到录制流，则播放播放列表中的下一个项目。
+    */
+    p += AMFAny::EncodeNumber(p, -1000.0);
+    // 设置包长度
+    header->msg_len = p - body;
+    packet->SetPacketSize(header->msg_len);
+
+    RTMP_TRACE("send play name:{} msg_len:{} host:{}", name_, header->msg_len, connection_->PeerAddr().ToIpPort());
+
+    // 加入到待编码的队列中
+    PushOutQueue(std::move(packet));
+}
+
+/// @brief 服务器处理
+/// @param obj
+void RtmpContext::HandlePlay(AMFObject& obj)
+{
+    // 1. 收到客户端的play，进行rtmp的url的解析
+    auto tran_id = obj.Property(1)->Number();
+    name_        = obj.Property(3)->String();
+    ParseNameAndTcUrl(); // tcUrl在handleConnect的时候就解析了
+
+    RTMP_TRACE("recv play session_name:{} param:{} host:{}", session_name_, param_, connection_->PeerAddr().ToIpPort());
+
+    is_player_ = true; // 是播放的客户端
+    // 2. 解析成功之后，发送streamBegin标志，通知客户端开始播放流
+    SendUserCtrlMessage(kRtmpEventTypeStreamBegin, 1, 0);
+    // 发送status
+    SendStatus("status", "NetStream.Play.Start", "Start playing");
+
+    if (rtmp_handler_) // 如果业务层存在， 告诉业务层
+    {
+        rtmp_handler_->OnPlay(connection_, session_name_, param_); // 业务层一般创建用户，归纳到推流session中
+    }
+}
+
+void RtmpContext::ParseNameAndTcUrl() // 解析名称和推流地址
+{
+    auto pos = app_.find_first_of("/");
+    if (pos != std::string::npos)
+    {
+        app_ = app_.substr(pos + 1);
+    }
+    param_.clear();
+    pos = name_.find_first_of("?"); // 有问号。后面就是带参数的
+    if (pos != std::string::npos)
+    {
+        param_ = name_.substr(pos + 1);
+    }
+
+    std::string              domain;
+    std::vector<std::string> list = base::StringUtils::SplitString(tcUrl_, "/");
+    if (list.size() == 6) // rtmp://ip/domain:port/app/stream
+    {
+        domain = list[3];
+        app_   = list[4];
+        name_  = list[5];
+    }
+    // 没有ip的情况
+    if (domain.empty() && tcUrl_.size() > 7) // rtmp:// 7个字符
+    {
+        auto pos = tcUrl_.find_first_of(":/", 7); // 第一个冒号或斜杠
+        if (pos != std::string::npos)
+        {
+            domain = tcUrl_.substr(7, pos);
+        }
+    }
+
+    std::stringstream ss;
+    session_name_.clear();
+    ss << domain << "/" << app_ << "/" << name_;
+    session_name_ = ss.str();
+
+    RTMP_TRACE("session_name:{} param:{} host:{}", session_name_, param_, connection_->PeerAddr().ToIpPort());
+}
+
+/// @brief  客户端发送推流，发布一个有名字的流到服务器，其他客户端可以用名字进行拉流play
+void RtmpContext::SendPublish()
+{
+    PacketPtr        packet = Packet::NewPacket(1024);
+    RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
+    header->cs_id           = kRtmpCSIDAMFIni; // 使用AMF的初始化，固定为3
+    header->msg_sid         = 1;               // netStream的命令固定为1
+    header->msg_len         = 0;
+    header->msg_type        = kRtmpMsgTypeAMFMessage; // AMF0，消息使用AMF序列化
+    packet->SetExt(header);
+
+    char* body = packet->Data();
+    char* p    = body;
+
+    // 设置消息体
+    p += AMFAny::EncodeString(p, "publish"); // command Name
+    p += AMFAny::EncodeNumber(p, 5);
+    *p++ = kAMFNull; // 空值
+    p += AMFAny::EncodeString(p, name_);
+    p += AMFAny::EncodeString(p, "live"); // 指定 类型，这里是直播
+    // 设置包长度
+    header->msg_len = p - body;
+    packet->SetPacketSize(header->msg_len);
+
+    RTMP_TRACE("send publish name:{} msg_len:{} host:{}", name_, header->msg_len, connection_->PeerAddr().ToIpPort());
+
+    // 加入到待编码的队列中
+    PushOutQueue(std::move(packet));
+}
+
+/// @brief 服务端处理publish命令，解析参数，拿到tran id回复
+/// @param obj
+void RtmpContext::HandlePublish(AMFObject& obj)
+{
+    auto tran_id = obj.Property(1)->Number();
+    name_        = obj.Property(3)->String();
+
+    RTMP_TRACE(
+        "recv publish session_name:{}  param:{} host:{}", session_name_, param_, connection_->PeerAddr().ToIpPort());
+
+    is_player_ = false; // 已经开始推流就不是拉流的了
+    // 通知客户端开始推流
+    SendStatus("status", "NetStream.Publish.Start", "Start publishing");
+
+    if (rtmp_handler_)
+    {
+        // 通知业务层，以后所有的播放都是加入到session_name中
+        rtmp_handler_->OnPublish(connection_, session_name_, param_);
+    }
+}
+
+void RtmpContext::HandleResult(AMFObject& obj)
+{
+    auto id = obj.Property(1)->Number(); // tran_id
+    RTMP_TRACE("recv result id:{}, host:{}", id, connection_->PeerAddr().ToIpPort());
+    if (id == 1) // connect
+    {
+        // id = 1是connect的结果，之后就要进行创建NetStream
+        SendCreateStream();
+    }
+    else if (id == 4) // NetStream结束
+    {
+        if (is_player_) // 是播放的客户端，就发送play请求
+        {
+            SendPlay();
+        }
+        else
+        {
+            SendPublish(); // 不是播放的，就是发布的
+        }
+    }
+}
+
+void RtmpContext::HandleError(AMFObject& obj)
+{
+    // 拿到描述
+    const std::string& description = obj.Property(3)->Object()->Property("description")->String();
+    RTMP_TRACE("recv error description: {} host:{}", description, connection_->PeerAddr().ToIpPort());
+    connection_->ForceClose();
+}
+
+/// @brief 在收到packet的时候，里面保存的类型是rtmpmsg的类型，需要转换成packetType
+/// @param packet
+void RtmpContext::SetPacketType(PacketPtr& packet)
+{
+    if (packet->PacketType() == kRtmpMsgTypeAudio)
+    {
+        packet->SetPacketType(kPacketTypeAudio);
+    }
+    if (packet->PacketType() == kRtmpMsgTypeVideo)
+    {
+        packet->SetPacketType(kPacketTypeVideo);
+    }
+    if (packet->PacketType() == kRtmpMsgTypeAMFMeta)
+    {
+        packet->SetPacketType(kPacketTypeMeta);
+    }
+    if (packet->PacketType() == kRtmpMsgTypeAMF3Meta) // metadata3
+    {
+        packet->SetPacketType(kPacketTypeMeta3);
+    }
 }
 
 } // namespace tmms::mm

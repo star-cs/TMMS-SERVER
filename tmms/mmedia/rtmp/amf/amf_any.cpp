@@ -172,5 +172,4 @@ int AMFAny::WriteNumber(char* buf, double value)
     return 8;
 }
 
-
 } // namespace tmms::mm

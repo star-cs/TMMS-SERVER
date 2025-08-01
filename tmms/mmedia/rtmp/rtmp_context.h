@@ -6,6 +6,7 @@
  * @Description:
  */
 #pragma once
+#include "mmedia/rtmp/amf/amf_object.h"
 #include "mmedia/rtmp/rtmp_hand_shake.h"
 #include "mmedia/rtmp/rtmp_hander.h"
 #include "mmedia/rtmp/rtmp_handler.h"
@@ -34,6 +35,8 @@ enum RtmpEventType
     kRtmpEventTypePingRequest,     // Ping 请求
     kRtmpEventTypePingResponse     // Ping 响应
 };
+
+using CommandFunc = std::function<void(AMFObject& obj)>;
 
 class RtmpContext // rtmp上下文
 {
@@ -71,10 +74,35 @@ public:
     // AMF相关
     void HandleAmfCommand(PacketPtr& data, bool amf3);
 
+    // NetConnection相关 服务端和客户端之间进行网络连接的高级表现形式
+    void SendConnect();
+    void HandleConnect(AMFObject& obj);
+
+    // NetStream相关， 传输音视频的命令消息
+    // 直播，只实现了play和publish
+    void SendCreateStream();
+    void HandleCreateStream(AMFObject& obj);
+
+    /// @brief 服务器通过发送onStatus给客户端通知网络流的状态更新
+    /// @param level  info object，至少有三个参数
+    /// @param code
+    /// @param description
+    void SendStatus(const std::string& level, const std::string& code, const std::string& description);
+
+    void SendPlay();                 // 客户端使用
+    void HandlePlay(AMFObject& obj); // 服务端处理
+    void ParseNameAndTcUrl();        // 解析名称和推流地址
+    void SendPublish();              // 客户端发送命令，发布一个有名字的流到服务器，其他客户端可以用名字进行拉流
+    void HandlePublish(AMFObject& obj);
+    // 对端收到Netconnection命令消息之后，进行回复，用_result或者_error回复
+    void HandleResult(AMFObject& obj);
+    void HandleError(AMFObject& obj);
+
 private:
     bool BuildChunk(PacketPtr&& packet, uint32_t timestamp = 0, bool fmt0 = false);
     void CheckAndSend();
     void PushOutQueue(PacketPtr&& packet);
+    void SetPacketType(PacketPtr& packet);
 
 private:
     RtmpHandShake                                  handshake_; // rtmp握手
@@ -103,6 +131,17 @@ private:
     int32_t ack_size_{2500000}; // 确认窗口
     int32_t in_bytes_{0};       // 接收到的数据，每次发送确认消息会重置0
     int32_t last_left_{0};      // 剩下的数据
+
+    std::string app_;
+    std::string tcUrl_;
+    std::string name_;
+
+    bool        is_player_;
+    std::string session_name_;
+    std::string param_;
+
+    // 保存所有命令的回调（connect之类的）
+    std::unordered_map<std::string, CommandFunc> commands_;
 };
 
 using RtmpContextPtr = std::shared_ptr<RtmpContext>;

@@ -31,7 +31,7 @@ public:
     virtual ~TcpServer();
 
 public:
-    // 所有的回调都是为了同时上层的业务层。
+    // 所有的回调都是为了通知上层的业务层。
     void SetNewConnectionCallback(const NewConnectionCallback& cb);
     void SetNewConnectionCallback(NewConnectionCallback&& cb);
     void SetDestroyConnectionCallback(const DestroyConnectionCallback& cb);

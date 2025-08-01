@@ -15,7 +15,14 @@ int AMFBoolean::Decode(const char* data, int size, bool has)
 
 void AMFBoolean::Dump() const
 {
-    RTMP_TRACE("Boolean:{}", b_);
+    if (!Name().empty())
+    {
+        RTMP_TRACE("name:{}, bool:{}", Name(), b_);
+    }
+    else
+    {
+        RTMP_TRACE("bool:{}", b_);
+    }
 }
 
 int AMFDate::Decode(const char* data, int size, bool has)
@@ -34,7 +41,14 @@ int AMFDate::Decode(const char* data, int size, bool has)
 
 void AMFDate::Dump() const
 {
-    RTMP_TRACE("Date:{}", utc_);
+    if (!Name().empty())
+    {
+        RTMP_TRACE("name:{}, Date:{}", Name(), utc_);
+    }
+    else
+    {
+        RTMP_TRACE("Date:{}", utc_);
+    }
 }
 
 // @brief longstring类型由len + data. len4 字节
@@ -60,7 +74,14 @@ int AMFLongString::Decode(const char* data, int size, bool has)
 
 void AMFLongString::Dump() const
 {
-    RTMP_TRACE("longstring:{}", longString_);
+    if (!Name().empty())
+    {
+        RTMP_TRACE("name:{}, longString:{}", Name(), longString_);
+    }
+    else
+    {
+        RTMP_TRACE("longString:{}", longString_);
+    }
 }
 
 // @brief 解析NUmber类型的数据
@@ -80,7 +101,14 @@ int AMFNumber::Decode(const char* data, int size, bool has)
 
 void AMFNumber::Dump() const
 {
-    RTMP_TRACE("number:{}", number_);
+    if (!Name().empty())
+    {
+        RTMP_TRACE("name:{}, number:{}", Name(), number_);
+    }
+    else
+    {
+        RTMP_TRACE("number:{}", number_);
+    }
 }
 
 /// @brief string类型由len + data. len2字节
@@ -107,7 +135,14 @@ int AMFString::Decode(const char* data, int size, bool has)
 
 void AMFString::Dump() const
 {
-    RTMP_TRACE("string:{}", string_);
+    if (!Name().empty())
+    {
+        RTMP_TRACE("name:{}, string:{}", Name(), string_);
+    }
+    else
+    {
+        RTMP_TRACE("string:{}", string_);
+    }
 }
 
 } // namespace tmms::mm

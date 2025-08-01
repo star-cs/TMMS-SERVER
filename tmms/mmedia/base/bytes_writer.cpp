@@ -30,9 +30,9 @@ int BytesWriter::WriteUint24T(char* buf, uint32_t val)
 
 int BytesWriter::WriteUint16T(char* buf, uint16_t val)
 {
-    val = htonl(val);
-    memcpy(buf, &val, sizeof(int16_t));
-    return sizeof(int16_t);
+    val = htons(val);
+    memcpy(buf, &val, sizeof(uint16_t));
+    return sizeof(uint16_t);
 }
 
 /// @brief 转换成网络字节序（大端）
