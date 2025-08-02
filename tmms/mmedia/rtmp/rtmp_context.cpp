@@ -26,9 +26,12 @@ namespace tmms::mm
 RtmpContext::RtmpContext(const TcpConnectionPtr& con, RtmpHandler* handler, bool client)
     : handshake_(con, client),
       connection_(con),
-      rtmp_handler_(handler)
+      rtmp_handler_(handler),
+      is_client_(client)
 {
     // 设置 命令处理函数
+    // 客户端发送的 releaseStream FCPublish 不处理
+    // 服务器发送的
     commands_["connect"]      = std::bind(&RtmpContext::HandleConnect, this, std::placeholders::_1);
     commands_["createStream"] = std::bind(&RtmpContext::HandleCreateStream, this, std::placeholders::_1);
     commands_["_result"]      = std::bind(&RtmpContext::HandleResult, this, std::placeholders::_1);
@@ -50,6 +53,11 @@ int32_t RtmpContext::Parse(MsgBuffer& buf)
         if (ret == 0)
         {
             state_ = kRtmpMessage;
+            // 客户端可以发送连接了
+            if (is_client_)
+            {
+                SendConnect();
+            }
             if (buf.ReadableBytes() > 0)
             {
                 return Parse(buf);
@@ -66,9 +74,8 @@ int32_t RtmpContext::Parse(MsgBuffer& buf)
     }
     else if (state_ == kRtmpMessage)
     {
-        auto i     = ParseMessage(buf);
+        ret        = ParseMessage(buf);
         last_left_ = buf.ReadableBytes();
-        return i;
     }
 
     return ret;
@@ -84,6 +91,11 @@ void RtmpContext::OnWriteComplete()
     else if (state_ == kRtmpWatingDone)
     {
         state_ = kRtmpMessage;
+        // 可能是在中途完成了握手
+        if (is_client_)
+        {
+            SendConnect();
+        }
     }
     else if (state_ == kRtmpMessage)
     {
@@ -92,7 +104,7 @@ void RtmpContext::OnWriteComplete()
 }
 
 /// @brief  启动握手，调用handshake_类的开始，客户端开始发送C0C1，服务端等待
-void RtmpContext::StarHandShake()
+void RtmpContext::StartHandShake()
 {
     handshake_.Start();
 }
@@ -102,33 +114,32 @@ void RtmpContext::StarHandShake()
 /// @return 1:数据不足；
 int32_t RtmpContext::ParseMessage(MsgBuffer& buf)
 {
-    uint8_t  fmt; // 一个字节
-    uint32_t csid, msg_len = 0, msg_sid = 0, timestamp = 0;
+    uint8_t  fmt;
+    uint32_t csid, msg_len = 0, msg_sid = 0;
     uint8_t  msg_type    = 0;
-    uint32_t total_bytes = buf.ReadableBytes(); // 包的大小
-    int32_t  parsed      = 0;                   // 已经解析的字节数
+    uint32_t total_bytes = buf.ReadableBytes();
+    int32_t  parsed      = 0;
 
-    // 上次剩下的数据不使用了，记录当前包的数据大小
-    in_bytes_ += (buf.ReadableBytes() - last_left_); // 再次收到的消息字节数
+    in_bytes_ += (buf.ReadableBytes() - last_left_);
     SendBytesRecv();
 
     while (total_bytes > 1)
     {
         const char* pos = buf.Peek();
         parsed          = 0;
-        //*********basic header********* */
+        // Basic Header
         fmt  = (*pos >> 6) & 0x03;
         csid = *pos & 0x3F;
         parsed++;
-        // csid 取0，1是一个新的消息包
-        // csid 如果是2，就是使用上一个包的所有东西，不用更新csid
+
         if (csid == 0)
         {
             if (total_bytes < 2)
             {
                 return 1;
             }
-            csid = 64 + *((uint8_t*)(pos + parsed));
+            csid = 64;
+            csid += *((uint8_t*)(pos + parsed));
             parsed++;
         }
         else if (csid == 1)
@@ -137,87 +148,102 @@ int32_t RtmpContext::ParseMessage(MsgBuffer& buf)
             {
                 return 1;
             }
-            csid = 64 + *((uint8_t*)(pos + parsed));
+            csid = 64;
+            csid += *((uint8_t*)(pos + parsed));
             parsed++;
-            csid = (csid << 8) + *((uint8_t*)(pos + parsed));
+            csid += *((uint8_t*)(pos + parsed)) * 256;
             parsed++;
         }
 
         int size = total_bytes - parsed;
-        if (size == 0 || (fmt == 0 && size < 11) || (fmt == 1 && size < 7) || (fmt == 2 && size < 3) ||
-            (fmt == 3 && size < 1))
+        if (size == 0 || (fmt == 0 && size < 11) || (fmt == 1 && size < 7) || (fmt == 2 && size < 3))
         {
             return 1;
         }
 
-        //*********message header********* */
         msg_len    = 0;
         msg_sid    = 0;
         msg_type   = 0;
-        timestamp  = 0;
-        int32_t ts = 0; // 时间差
+        int32_t ts = 0;
 
-        RtmpMsgHeaderPtr& prev = in_message_headers_[csid]; // 取出前一个消息头
+        RtmpMsgHeaderPtr& prev = in_message_headers_[csid];
         if (!prev)
         {
             prev = std::make_shared<RtmpMsgHeader>();
         }
+        msg_len = prev->msg_len;
+        if (fmt == kRtmpFmt0 || fmt == kRtmpFmt1)
+        {
+            msg_len = BytesReader::ReadUint24T((pos + parsed) + 3);
+        }
+        else if (msg_len == 0)
+        {
+            msg_len = in_chunk_size_;
+        }
+        PacketPtr& packet = in_packets_[csid];
+        if (!packet)
+        {
+            packet                  = Packet::NewPacket(msg_len);
+            RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
+            header->cs_id           = csid;
+            header->msg_len         = msg_len;
+            header->msg_sid         = msg_sid;
+            header->msg_type        = msg_type;
+            header->timestamp       = 0;
+            packet->SetExt(header);
+        }
+
+        RtmpMsgHeaderPtr header = packet->Ext<RtmpMsgHeader>();
 
         if (fmt == kRtmpFmt0)
         {
-            // timestamp 是前3字节
             ts = BytesReader::ReadUint24T(pos + parsed);
             parsed += 3;
-            // fmt=0的时候，存的timestamp是绝对时间，所以时间差为0。
-            // 其他两个存的是和上一个chunk的时间差
-            in_deltas_[csid] = 0;
-            timestamp        = ts;
-
-            msg_len = BytesReader::ReadUint24T(pos + parsed);
+            in_deltas_[csid]  = 0;
+            header->timestamp = ts;
+            header->msg_len   = BytesReader::ReadUint24T(pos + parsed);
             parsed += 3;
-            msg_type = BytesReader::ReadUint8T(pos + parsed);
+            header->msg_type = BytesReader::ReadUint8T(pos + parsed);
             parsed += 1;
-            msg_sid = BytesReader::ReadUint32T(pos + parsed);
+            memcpy(&header->msg_sid, pos + parsed, 4);
             parsed += 4;
         }
         else if (fmt == kRtmpFmt1)
         {
-            // timestamp 是前3字节
             ts = BytesReader::ReadUint24T(pos + parsed);
             parsed += 3;
-            in_deltas_[csid] = ts;
-            timestamp        = ts + prev->timestamp;
-            msg_len          = BytesReader::ReadUint24T(pos + parsed);
+            in_deltas_[csid]  = ts;
+            header->timestamp = ts + prev->timestamp;
+            header->msg_len   = BytesReader::ReadUint24T(pos + parsed);
             parsed += 3;
-            msg_type = BytesReader::ReadUint8T(pos + parsed);
+            header->msg_type = BytesReader::ReadUint8T(pos + parsed);
             parsed += 1;
-            // fmt=1用前一个消息的stream id
-            msg_sid = prev->msg_sid;
+            header->msg_sid = prev->msg_sid;
         }
         else if (fmt == kRtmpFmt2)
         {
-            // timestamp 是前3字节
             ts = BytesReader::ReadUint24T(pos + parsed);
             parsed += 3;
-            in_deltas_[csid] = ts;
-            timestamp        = ts + prev->timestamp;
-            // fmt=2，下面都用前一个
-            msg_len  = prev->msg_len;
-            msg_type = prev->msg_type;
-            msg_sid  = prev->msg_sid;
+            in_deltas_[csid]  = ts;
+            header->timestamp = ts + prev->timestamp;
+            header->msg_len   = prev->msg_len;
+            header->msg_type  = prev->msg_type;
+            header->msg_sid   = prev->msg_sid;
         }
         else if (fmt == kRtmpFmt3)
         {
-            timestamp = in_deltas_[csid] + prev->timestamp;
-            msg_len   = prev->msg_len;
-            msg_type  = prev->msg_type;
-            msg_sid   = prev->msg_sid;
+            if (header->timestamp == 0)
+            {
+                header->timestamp = in_deltas_[csid] + prev->timestamp;
+            }
+            header->msg_len  = prev->msg_len;
+            header->msg_type = prev->msg_type;
+            header->msg_sid  = prev->msg_sid;
         }
 
-        //*********Ext timestamp********* */
-        bool ext = (ts == 0xFFFFFF); // timestamp全1表示有ext
+        bool ext = (ts == 0xFFFFFF);
         if (fmt == kRtmpFmt3)
-        { // fmt=3，都是用的前一个header,直接沿用就行
+        {
             ext = in_ext_[csid];
         }
         in_ext_[csid] = ext;
@@ -227,41 +253,21 @@ int32_t RtmpContext::ParseMessage(MsgBuffer& buf)
             {
                 return 1;
             }
-            timestamp = BytesReader::ReadUint32T(pos + parsed);
+            ts = BytesReader::ReadUint32T(pos + parsed);
             parsed += 4;
-            if (fmt != kRtmpFmt0) // 不是fmt0，要计算时间差
+            if (fmt != kRtmpFmt0)
             {
-                timestamp        = ts + prev->timestamp;
-                in_deltas_[csid] = ts;
+                header->timestamp = ts + prev->timestamp;
+                in_deltas_[csid]  = ts;
             }
         }
 
-        // 数据包
-        PacketPtr& packet = in_packets_[csid];
-        if (!packet)
-        {
-            packet = Packet::NewPacket(msg_len);
-        }
-        RtmpMsgHeaderPtr header = packet->Ext<RtmpMsgHeader>(); // 创建数据包头
-        if (!header)
-        {
-            header = std::make_shared<RtmpMsgHeader>();
-            packet->SetExt(header);
-        }
-        header->cs_id     = csid;
-        header->timestamp = timestamp;
-        header->msg_len   = msg_len;
-        header->msg_type  = msg_type;
-        header->msg_sid   = msg_sid;
-
-        // chunk body数据
         int bytes = std::min(packet->Space(), in_chunk_size_);
         if (total_bytes - parsed < bytes)
         {
             return 1;
         }
 
-        // chunk data 起始位置
         const char* body = packet->Data() + packet->PacketSize();
         memcpy((void*)body, pos + parsed, bytes);
         packet->UpdatePacketSize(bytes);
@@ -270,18 +276,16 @@ int32_t RtmpContext::ParseMessage(MsgBuffer& buf)
         buf.Retrieve(parsed);
         total_bytes -= parsed;
 
-        // 更新前一个消息头
-        prev->cs_id     = csid;
-        prev->msg_len   = msg_len;
-        prev->msg_sid   = msg_sid;
-        prev->msg_type  = msg_type;
-        prev->timestamp = timestamp;
+        prev->cs_id     = header->cs_id;
+        prev->msg_len   = header->msg_len;
+        prev->msg_sid   = header->msg_sid;
+        prev->msg_type  = header->msg_type;
+        prev->timestamp = header->timestamp;
 
-        // 一个完整的Message消息收完了
         if (packet->Space() == 0)
         {
-            packet->SetPacketType(msg_type);
-            packet->SetTimeStamp(timestamp);
+            packet->SetPacketType(header->msg_type);
+            packet->SetTimeStamp(header->timestamp);
             MessageComplete(std::move(packet));
             packet.reset();
         }
@@ -289,6 +293,8 @@ int32_t RtmpContext::ParseMessage(MsgBuffer& buf)
     return 1;
 }
 
+/// @brief 解析完成数据之后，对应的命令控制类型消息进行处理，对应的音视频数据给业务层转发
+/// @param data
 void RtmpContext::MessageComplete(Packet::ptr&& data)
 {
     RTMP_TRACE("recv message type:{}, len:{}", data->PacketType(), data->PacketSize());
@@ -433,7 +439,7 @@ bool RtmpContext::BuildChunk(const PacketPtr& packet, uint32_t timestamp, bool f
         }
         // 起始out_current_， 包大小p - out_current_
         BufferNodePtr nheader = std::make_shared<BufferNode>(out_current_, p - out_current_);
-        sending_bufs_.emplace_back(nheader);
+        sending_bufs_.emplace_back(std::move(nheader));
         out_current_ = p;
 
         prev->cs_id    = header->cs_id; // 更新前一个的值
@@ -629,7 +635,7 @@ bool RtmpContext::BuildChunk(PacketPtr&& packet, uint32_t timestamp, bool fmt0)
         }
         // 起始out_current_， 包大小p - out_current_
         BufferNodePtr nheader = std::make_shared<BufferNode>(out_current_, p - out_current_);
-        sending_bufs_.emplace_back(nheader);
+        sending_bufs_.emplace_back(std::move(nheader));
         out_current_ = p;
 
         prev->cs_id    = header->cs_id; // 更新前一个的值
@@ -731,7 +737,7 @@ void RtmpContext::CheckAndSend()
 
 void RtmpContext::PushOutQueue(PacketPtr&& packet)
 {
-    out_waiting_queue_.push_back(std::move(packet));
+    out_waiting_queue_.emplace_back(std::move(packet));
     Send();
 }
 
@@ -744,7 +750,7 @@ void RtmpContext::SendSetChunkSize() // 块大小
     {
         header->cs_id     = kRtmpCSIDCommand; // 所有控制命令的scid都是2
         header->msg_type  = kRtmpMsgTypeChunkSize;
-        header->timestamp = 0;
+        header->msg_len   = 0;
         header->msg_sid   = kRtmpMsID0;
         header->timestamp = 0;
 
@@ -767,15 +773,15 @@ void RtmpContext::SendAckWindowsSize() // 确认窗口大小
     if (header)
     {
         header->cs_id     = kRtmpCSIDCommand;
-        header->msg_len   = 4;
+        header->msg_len   = 0;
         header->msg_type  = kRtmpMsgTypeWindowACKSize;
-        header->msg_sid   = kRtmpMsID0;
         header->timestamp = 0;
+        header->msg_sid   = kRtmpMsID0;
 
         packet->SetExt(header);
 
-        char* body = packet->Data();
-        BytesWriter::WriteUint32T(body, ack_size_);
+        char* body      = packet->Data();
+        header->msg_len = BytesWriter::WriteUint32T(body, ack_size_);
         packet->SetPacketSize(header->msg_len);
 
         RTMP_DEBUG("send ack size:{}, to host:{}", ack_size_, connection_->PeerAddr().ToIpPort());
@@ -790,17 +796,19 @@ void RtmpContext::SendSetPeerBandwidth() // 带宽，和窗口大小值是一样
     if (header)
     {
         header->cs_id     = kRtmpCSIDCommand;
-        header->msg_len   = 5;
+        header->msg_len   = 0;
         header->msg_type  = kRtmpMsgTypeSetPeerBW;
-        header->msg_sid   = kRtmpMsID0;
         header->timestamp = 0;
+        header->msg_sid   = kRtmpMsID0;
 
         packet->SetExt(header);
 
         char* body = packet->Data();
+        // ack_size_ 是int32_t类型，占4个字节, 确认窗口大小就是带宽的大小
         body += BytesWriter::WriteUint32T(body, ack_size_);
-        *body++ = 0x02; // 0x02: limit type
-        packet->SetPacketSize(header->msg_len);
+        *body++         = 0x02; // 设置带宽要多加一个，限制类型，设置为2是动态的
+        header->msg_len = 5;
+        packet->SetPacketSize(5); // ack_szie 4字节 + 类型 1字节
 
         RTMP_DEBUG("send PeerBandwidth:{}, to host:{}", ack_size_, connection_->PeerAddr().ToIpPort());
         PushOutQueue(std::move(packet));
@@ -818,15 +826,17 @@ void RtmpContext::SendBytesRecv() // 发送确认消息
         if (header)
         {
             header->cs_id     = kRtmpCSIDCommand;
-            header->msg_len   = 4;
-            header->msg_type  = kRtmpMsgTypeBytesRead;
-            header->msg_sid   = kRtmpMsID0;
+            header->msg_len   = 0;
+            header->msg_type  = kRtmpMsgTypeBytesRead; // 确认消息的类型
             header->timestamp = 0;
+            header->msg_sid   = kRtmpMsID0;
+            packet->SetExt(header);
 
             packet->SetExt(header);
 
             char* body = packet->Data();
-            body += BytesWriter::WriteUint32T(body, in_bytes_);
+            // ack_size_ 是int32_t类型`
+            header->msg_len = BytesWriter::WriteUint32T(body, in_bytes_);
             packet->SetPacketSize(header->msg_len);
 
             RTMP_DEBUG("send BytesRecv:{}, to host:{}", in_bytes_, connection_->PeerAddr().ToIpPort());
@@ -857,11 +867,11 @@ void RtmpContext::SendUserCtrlMessage(short nType, uint32_t value1, uint32_t val
 
         char* body = packet->Data();
         char* p    = body;
-        p += BytesWriter::WriteUint16T(p, value1);
-        p += BytesWriter::WriteUint16T(p, value2);
-        if (nType == kRtmpEventTypeSetBufferLength)
+        p += BytesWriter::WriteUint16T(body, nType);  // event type
+        p += BytesWriter::WriteUint32T(body, value1); // event data
+        if (nType == kRtmpEventTypeSetBufferLength)   // 设置buffer长度
         {
-            p += BytesWriter::WriteUint16T(p, value2);
+            p += BytesWriter::WriteUint32T(body, value2);
         }
         header->msg_len = p - body;
         packet->SetPacketSize(header->msg_len);
@@ -923,9 +933,8 @@ void RtmpContext::HandleUserMessage(PacketPtr& packet)
     char* body = packet->Data();
     // 1.解析类型
     auto type = BytesReader::ReadUint16T(body);
-    body += 2;
     // 2.解析用户数据 4字节
-    auto value = BytesReader::ReadUint32T(body);
+    auto value = BytesReader::ReadUint32T(body + 2);
 
     RTMP_TRACE("recv user control type:{} host:{}", value, connection_->PeerAddr().ToIpPort());
 
@@ -981,7 +990,9 @@ void RtmpContext::HandleUserMessage(PacketPtr& packet)
     }
 }
 
-// AMF相关
+/// @brief 所有的rtmp命令消息都用amf封装，从amf中拿出命令，调用对应处理函数
+/// @param data
+/// @param amf3
 void RtmpContext::HandleAmfCommand(PacketPtr& data, bool amf3)
 {
     RTMP_TRACE("amf message len:{}, host:{}", data->PacketSize(), connection_->PeerAddr().ToIpPort());
@@ -1019,23 +1030,26 @@ void RtmpContext::HandleAmfCommand(PacketPtr& data, bool amf3)
 // NetConnection相关 服务端和客户端之间进行网络连接的高级表现形式
 void RtmpContext::SendConnect()
 {
+    SendSetChunkSize(); // 设置chunksize，每个控制命令都是一个packet
     PacketPtr        packet = Packet::NewPacket(1024);
     RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
-    header->msg_sid         = 0;
+    header->cs_id           = kRtmpCSIDAMFIni; // 使用AMF的初始化，固定为3
+    header->msg_sid         = 0;               // 固定的值在connect中
+    header->msg_len         = 0;
     header->msg_type        = kRtmpMsgTypeAMFMessage; // AMF0，消息使用AMF序列化
     packet->SetExt(header);
 
     char* body = packet->Data();
     char* p    = body;
 
-    // 消息体
-    p += AMFObject::EncodeString(p, "connect");
-    p += AMFObject::EncodeNumber(p, 1.0);
+    // 设置消息体
+    p += AMFAny::EncodeString(p, "connect"); // command Name
+    p += AMFAny::EncodeNumber(p, 1.0);       // Transaction ID 固定的1
     *p++ = kAMFObject;
     // command object
-    p += AMFObject::EncodeNamedString(p, "app", app_);     // 推流点
-    p += AMFObject::EncodeNamedString(p, "tcUrl", tcUrl_); // 推流地址
-    p += AMFAny::EncodeNamedBoolean(p, "fpad", false);     //
+    p += AMFAny::EncodeNamedString(p, "app", app_);      // 推流点
+    p += AMFAny::EncodeNamedString(p, "tcUrl", tcUrl_); // 推流url
+    p += AMFAny::EncodeNamedBoolean(p, "fpad", false);   //
     p += AMFAny::EncodeNamedNumber(p, "capabilities", 31.0);
     p += AMFAny::EncodeNamedNumber(p, "audioCodecs", 1639.0); // 可以支持的音频类型，二进制1表示
     p += AMFAny::EncodeNamedNumber(p, "videoCodecs", 252.0);  // 同样可支持的视频编码类型
@@ -1122,7 +1136,7 @@ void RtmpContext::HandleConnect(AMFObject& obj)
 void RtmpContext::SendCreateStream()
 {
     PacketPtr        packet = Packet::NewPacket(1024);
-    RtmpMsgHeaderPtr header = std::shared_ptr<RtmpMsgHeader>();
+    RtmpMsgHeaderPtr header = std::make_shared<RtmpMsgHeader>();
 
     header->cs_id    = kRtmpCSIDAMFIni;
     header->msg_sid  = 0;
@@ -1300,15 +1314,26 @@ void RtmpContext::ParseNameAndTcUrl() // 解析名称和推流地址
         app_   = list[4];
         name_  = list[5];
     }
-    // 没有ip的情况
-    if (domain.empty() && tcUrl_.size() > 7) // rtmp:// 7个字符
+    else if (list.size() == 5) // rtmp://domain:port/app/stream
     {
-        auto pos = tcUrl_.find_first_of(":/", 7); // 第一个冒号或斜杠
-        if (pos != std::string::npos)
-        {
-            domain = tcUrl_.substr(7, pos);
-        }
+        domain = list[2];
+        app_   = list[3];
+        name_  = list[4];
     }
+
+    // 没有ip的情况
+    auto p = domain.find_first_not_of(":");
+    if (p != domain.npos)
+    {
+        domain = domain.substr(0, p);
+    }
+
+    session_name_.clear();
+    session_name_ += domain;
+    session_name_ += "/";
+    session_name_ += app_;
+    session_name_ += "/";
+    session_name_ += name_;
 
     std::stringstream ss;
     session_name_.clear();
@@ -1389,6 +1414,14 @@ void RtmpContext::HandleResult(AMFObject& obj)
             SendPublish(); // 不是播放的，就是发布的
         }
     }
+    else if (id == 5) // publish发送的时候是5
+    {
+        if (rtmp_handler_)
+        {
+            // 准备好了，可以往conection写数据了
+            rtmp_handler_->OnPublishPrepare(connection_);
+        }
+    }
 }
 
 void RtmpContext::HandleError(AMFObject& obj)
@@ -1419,6 +1452,22 @@ void RtmpContext::SetPacketType(PacketPtr& packet)
     {
         packet->SetPacketType(kPacketTypeMeta3);
     }
+}
+
+void RtmpContext::Play(const std::string& url)
+{
+    is_client_ = true;
+    is_player_ = true;
+    tcUrl_     = url;
+    ParseNameAndTcUrl();
+}
+
+void RtmpContext::Publish(const std::string& url)
+{
+    is_client_ = true;
+    is_player_ = false; // 推流
+    tcUrl_     = url;
+    ParseNameAndTcUrl();
 }
 
 } // namespace tmms::mm

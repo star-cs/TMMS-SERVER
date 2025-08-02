@@ -141,6 +141,10 @@ vector<string> StringUtils::SplitString(const string& s, const string& delimiter
         {
             result.emplace_back(s.substr(last, next - last)); // 子串分割
         }
+        else
+        {
+            result.emplace_back("");
+        }
 
         last = next + delimiter.size();
     }
@@ -197,4 +201,4 @@ vector<string> StringUtils::SplitStringWithFSM(const string& s, const char delim
     return result;
 }
 
-} // namespace tmms::net
+} // namespace tmms::base

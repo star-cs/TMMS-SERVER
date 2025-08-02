@@ -158,7 +158,7 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
             }
             break;
         }
-        case kHandShakeWaitC2: // 服务端收到客户端发送C2的状态，就可以检测，标记结束
+        case kHandShakeWaitC2: // 服务端收到客户端发送C2的状态，就可以检测
         {
             if (buf.ReadableBytes() < kRtmpHandShakePacketSize)
             {
@@ -168,8 +168,8 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
             if (CheckC2S2(buf.Peek(), kRtmpHandShakePacketSize))
             {
                 buf.Retrieve(kRtmpHandShakePacketSize);
-                RTMP_TRACE("host:{} handshake done", connection_->PeerAddr().ToIpPort());
-                state_ = kHandShakeDone;
+                state_ = kHandShakePostS2;
+                SendC2S2();
                 return 0;
             }
             else
@@ -192,25 +192,36 @@ int32_t RtmpHandShake::HandShake(MsgBuffer& buf)
                 // S0S1 接受完，创建C2准备，接收到S2时发送。
                 CreateC2S2(buf.Peek() + 1, kRtmpHandShakePacketSize, offset);
                 buf.Retrieve(kRtmpHandShakePacketSize + 1);
-                // 因为服务端发送完了S0S1，可以接着就发S2了，判断有没有收到S2
-                if (buf.ReadableBytes() == kRtmpHandShakePacketSize) // S2
-                {
-                    RTMP_TRACE("host:{}, Recv S2.", connection_->PeerAddr().ToIpPort());
-                    state_ = kHandShakeDoning; // 等待C2发送完
-                    buf.Retrieve(kRtmpHandShakePacketSize);
-                    SendC2S2();
-                    return 0;
-                }
-                else
-                {
-                    state_ = kHandShakePostC2; // 状态变了，因为没有收到S2，就是准备发送C2的状态
-                    SendC2S2();
-                }
+                state_ = kHandShakePostC2; // 状态变了，因为没有收到S2，就是准备发送C2的状态
+                SendC2S2();
             }
             else
             {
                 RTMP_TRACE("host:{} Check S0S1 error", connection_->PeerAddr().ToIpPort());
                 return -1;
+            }
+            break;
+        }
+        case kHandShakeWaitS2:
+        {
+            {
+                // 因为服务端发送完了S0S1，可以接着就发S2了，判断有没有收到S2
+                if (buf.ReadableBytes() < kRtmpHandShakePacketSize) // S2
+                {
+                    return 1;
+                }
+                RTMP_TRACE("host:{}, Recv S2.", connection_->PeerAddr().ToIpPort());
+                if (CheckC2S2(buf.Peek(), kRtmpHandShakePacketSize))
+                {
+                    buf.Retrieve(kRtmpHandShakePacketSize);
+                    state_ = kHandShakeDone;
+                    return 0;
+                }
+                else
+                {
+                    RTMP_TRACE("host:{} Recv S2. error", connection_->PeerAddr().ToIpPort());
+                    return -1;
+                }
             }
             break;
         }
@@ -226,14 +237,13 @@ void RtmpHandShake::WriteComplete()
         case kHandShakePostS0S1: // 服务端发送完S0S1，服务端可以直接发送S2
         {
             RTMP_TRACE("host:{} Post S0S1.", connection_->PeerAddr().ToIpPort());
-            state_ = kHandShakePostS2;
-            SendC2S2();
+            state_ = kHandShakeWaitC2;
             break;
         }
         case kHandShakePostS2:
         {
             RTMP_TRACE("host:{} Post S2.", connection_->PeerAddr().ToIpPort());
-            state_ = kHandShakeWaitC2; // 等客户端的C2
+            state_ = kHandShakeDone;
             break;
         }
         case kHandShakePostC0C1:
@@ -244,8 +254,8 @@ void RtmpHandShake::WriteComplete()
         }
         case kHandShakePostC2: // 客户端收到S0S1之后，但是没有连续收到S2，就变为PostC2完成状态 。客户端PostC2就完成
         {
-            RTMP_TRACE("host:{} Post C0C1.", connection_->PeerAddr().ToIpPort());
-            state_ = kHandShakeDone;
+            RTMP_TRACE("host:{} Post C2.done", connection_->PeerAddr().ToIpPort());
+            state_ = kHandShakeWaitS2;
             break;
         }
         case kHandShakeDoning:
@@ -378,7 +388,7 @@ int32_t RtmpHandShake::CheckC1S1(const char* data, int bytes)
 
 void RtmpHandShake::SendC1S1()
 {
-    connection_->Send((const char*)C1S1_, 1537); // C0C1或者S0S1都是一起发送的，C0一个字节，C1 1536字节
+    connection_->Send((const char*)C1S1_, kRtmpHandShakePacketSize+1); // C0C1或者S0S1都是一起发送的，C0一个字节，C1 1536字节
 }
 
 /// @brief digest-data计算方法：
@@ -393,40 +403,29 @@ void RtmpHandShake::CreateC2S2(const char* data, int bytes, int offset)
     {
         C2S2_[i] = GenRandom();
     }
-    if (!is_complex_handshake_)
-    {
-        // 简单模式
-        // 4字节 time 发送时刻的时间戳
-        // 4字节 time2 接受对端发送过来的握手包时刻
-        // 1528字节 随机数据
-        memcpy(C2S2_, data, 8);              // data是C1S1的前八字节,timestamp和version
-        auto timestamp = base::TTime::Now(); // 设置当前时间戳，version不变
-        // 设置当前时间戳，version不变
-        char* t = (char*)&timestamp; // C2S2_是单字节的数组，要转换下
 
-        // 网络端要转换字节序，小端变大端 ，timestamp一共4字节
-        C2S2_[3] = t[0];
-        C2S2_[2] = t[1];
-        C2S2_[1] = t[2];
-        C2S2_[0] = t[3];
-    }
-    else
-    {
-        // 复杂模式
-        // 1504 字节 随机数据
-        // 32 字节  random-data 的 digest-data
+    memcpy(C2S2_, data, 8); // data是C1S1的前八字节,timestamp和version
 
-        // S2：先通过C1的digest，计算出key，再用这个key计算random-data的digest。
-        // C2：先通过S1的digest，计算出key，再用这个key计算random-data的digest。
+    auto  timestamp = tmms::base::TTime::Now(); // 设置当前时间戳，version不变
+    char* t         = (char*)&timestamp;        // C2S2_是单字节的数组，要转换下
+    // 网络端要转换字节序，小端变大端 ，timestamp一共4字节
+    C2S2_[3] = t[0];
+    C2S2_[2] = t[1];
+    C2S2_[1] = t[2];
+    C2S2_[0] = t[3];
+
+    if (is_complex_handshake_)
+    {
         uint8_t digest[32]; // key
         if (is_client_)
         {
             // 计算C1S1的digest_，客户端就计算自己的，填充C2
-            CalculateDigest(digest_, 32, 0, rtmp_player_key, sizeof(rtmp_player_key), digest);
+            // fixbug: 这里的digest_是自己的，应该是用对方发送的digest_
+            CalculateDigest((const uint8_t*)(data + offset), 32, 0, rtmp_player_key, sizeof(rtmp_player_key), digest);
         }
         else
         {
-            CalculateDigest(digest_, 32, 0, rtmp_server_key, sizeof(rtmp_server_key), digest);
+            CalculateDigest((const uint8_t*)(data + offset), 32, 0, rtmp_server_key, sizeof(rtmp_server_key), digest);
         }
         // 计算真正的digest 32 bytes
         CalculateDigest(C2S2_, kRtmpHandShakePacketSize - 32, 0, digest, 32, &C2S2_[kRtmpHandShakePacketSize - 32]);

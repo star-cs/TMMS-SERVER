@@ -46,7 +46,7 @@ void RtmpServer::OnNewConnection(const TcpConnectionPtr& conn)
     // 2. 处理rtmp服务端连接
     RtmpContextPtr context = std::make_shared<RtmpContext>(conn, nullptr);
     conn->SetContext(kRtmpContext, context);
-    context->StarHandShake(); // 等待C0C1
+    context->StartHandShake(); // 等待C0C1
 }
 
 void RtmpServer::OnConnectionDestroy(const TcpConnectionPtr& conn)
@@ -64,7 +64,7 @@ void RtmpServer::OnMessage(const TcpConnectionPtr& conn, MsgBuffer& buf)
     if (context)
     {
         int ret = context->Parse(buf); // 开始握手
-        if (ret == 0)                // 0握手成功
+        if (ret == 0)                       // 0握手成功
         {
             RTMP_DEBUG("host:{} handshake success.", conn->PeerAddr().ToIpPort());
         }

@@ -47,7 +47,7 @@ public:
 public:
     int32_t Parse(MsgBuffer& buf);
     void    OnWriteComplete();
-    void    StarHandShake();
+    void    StartHandShake();
 
     // 接受数据解析
     int32_t ParseMessage(MsgBuffer& buf);
@@ -98,6 +98,10 @@ public:
     void HandleResult(AMFObject& obj);
     void HandleError(AMFObject& obj);
 
+    // 客户端，拉流和推流
+    void Play(const std::string& url);
+    void Publish(const std::string& url);
+
 private:
     bool BuildChunk(PacketPtr&& packet, uint32_t timestamp = 0, bool fmt0 = false);
     void CheckAndSend();
@@ -142,6 +146,9 @@ private:
 
     // 保存所有命令的回调（connect之类的）
     std::unordered_map<std::string, CommandFunc> commands_;
+
+    // 客户端
+    bool is_client_{false}; // 标识客户端
 };
 
 using RtmpContextPtr = std::shared_ptr<RtmpContext>;

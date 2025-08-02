@@ -8,7 +8,7 @@
 #pragma once
 
 #include "network/net/tcpconnection.h"
-#include <algorithm>
+#include <memory>
 
 namespace tmms::net
 {
@@ -50,4 +50,7 @@ private:
     int32_t            status_{kTcpConStatusInit};
     ConnectionCallback connected_cb_; // 连接回调
 };
+
+using TcpClientPtr = std::shared_ptr<TcpClient>;
+
 } // namespace tmms::net
