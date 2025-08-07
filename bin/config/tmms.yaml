@@ -1,1 +1,17 @@
+name: tmms server
+
+cpu_start: 0
+threads: 4
+cpus: 4
+
 log_level: debug
+
+services:
+  - addr: 0.0.0.0
+    port: 1935
+    portocol: rtmp
+    transport: tcp
+
+directory:
+  - path: config/publish/starcs.com.yaml
+

@@ -63,8 +63,8 @@ void RtmpServer::OnMessage(const TcpConnectionPtr& conn, MsgBuffer& buf)
     RtmpContextPtr context = conn->GetContext<RtmpContext>(kRtmpContext);
     if (context)
     {
-        int ret = context->Parse(buf); // 开始握手
-        if (ret == 0)                       // 0握手成功
+        int ret = context->Parse(buf); // 解析 buf。握手包 或者 数据包
+        if (ret == 0)                       
         {
             RTMP_DEBUG("host:{} handshake success.", conn->PeerAddr().ToIpPort());
         }

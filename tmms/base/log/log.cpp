@@ -20,34 +20,39 @@
 
 using namespace tmms::base;
 std::shared_ptr<spdlog::logger> Log::core_logger_;
-std::shared_ptr<spdlog::logger> Log::hls_logger_;
+std::shared_ptr<spdlog::logger> Log::live_logger_;
 std::shared_ptr<spdlog::logger> Log::rtmp_logger_;
 
 spdlog::logger* Log::ptr_core_logger_ = nullptr;
-spdlog::logger* Log::ptr_hls_logger_  = nullptr;
+spdlog::logger* Log::ptr_live_logger_ = nullptr;
 spdlog::logger* Log::ptr_rtmp_logger_ = nullptr;
 
 void Log::init(bool debug)
 {
+    if (ptr_core_logger_ != nullptr && ptr_live_logger_ != nullptr && ptr_rtmp_logger_ != nullptr)
+    {
+        return;
+    }
+    
     if (debug)
     {
         spdlog::set_level(spdlog::level::trace);
 
         core_logger_     = spdlog::stdout_color_mt("core");
-        hls_logger_      = spdlog::stdout_color_mt("hls");
+        live_logger_     = spdlog::stdout_color_mt("live");
         rtmp_logger_     = spdlog::stdout_color_mt("rtmp");
         ptr_core_logger_ = core_logger_.get();
-        ptr_hls_logger_  = hls_logger_.get();
+        ptr_live_logger_ = live_logger_.get();
         ptr_rtmp_logger_ = rtmp_logger_.get();
 
         auto debug_format = "[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%t] [%@] %v";
 
         core_logger_->set_pattern(debug_format);
-        hls_logger_->set_pattern(debug_format);
+        live_logger_->set_pattern(debug_format);
         ptr_rtmp_logger_->set_pattern(debug_format);
 
         core_logger_->flush_on(spdlog::level::debug);
-        hls_logger_->flush_on(spdlog::level::debug);
+        live_logger_->flush_on(spdlog::level::debug);
         rtmp_logger_->flush_on(spdlog::level::debug);
     }
     else
@@ -56,15 +61,15 @@ void Log::init(bool debug)
 
         std::filesystem::create_directories(Utils::get_bin_path() + "/logs");
         core_logger_ = spdlog::daily_logger_mt("core", Utils::get_bin_path() + "/logs/core.log", 00, 00);
-        hls_logger_  = spdlog::daily_logger_mt("hls", Utils::get_bin_path() + "/logs/hls.log", 00, 00);
+        live_logger_ = spdlog::daily_logger_mt("hls", Utils::get_bin_path() + "/logs/hls.log", 00, 00);
         rtmp_logger_ = spdlog::daily_logger_mt("rtmp", Utils::get_bin_path() + "/logs/rtmp.log");
 
         ptr_core_logger_ = core_logger_.get();
-        ptr_hls_logger_  = hls_logger_.get();
+        ptr_live_logger_ = live_logger_.get();
         ptr_rtmp_logger_ = rtmp_logger_.get();
 
         core_logger_->flush_on(spdlog::level::info);
-        hls_logger_->flush_on(spdlog::level::info);
+        live_logger_->flush_on(spdlog::level::info);
         rtmp_logger_->flush_on(spdlog::level::info);
     }
 }

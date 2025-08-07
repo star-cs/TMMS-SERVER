@@ -10,9 +10,27 @@
 #include "base/allocator/memory.hpp"
 #include "base/singleton.h"
 #include "base/types.hpp"
+#include <unordered_map>
+#include <vector>
+#include <yaml-cpp/yaml.h>
 
 namespace tmms::base
 {
+// 直播服务的信息
+struct ServiceInfo
+{
+    std::string addr;
+    uint16_t    port;
+    std::string portocol;  // 业务协议如:rtmp
+    std::string transport; // 传输协议如:tcp
+};
+using ServiceInfoPtr = std::shared_ptr<ServiceInfo>;
+
+class DomainInfo;
+class AppInfo;
+using DomainInfoPtr = std::shared_ptr<DomainInfo>;
+using AppInfoPtr    = std::shared_ptr<AppInfo>;
+
 class Config : public SingletonPtr<Config>
 {
 public:
@@ -25,8 +43,27 @@ public:
     bool               load_config(const std::string& config_path);
     const std::string& get_log_level() const { return log_level_; }
 
+    const std::vector<ServiceInfoPtr>& GetServiceInfos() { return services_; }
+
+    const ServiceInfoPtr& GetServiceInfo(const std::string& portocol, const std::string& transport);
+    bool                  ParseServiceInfo(const YAML::Node& serviceObj);
+    // 直播业务层配置相关
+    AppInfoPtr GetAppInfo(const std::string& domain, const std::string& app);
+
+    DomainInfoPtr GetDomainInfo(const std::string& domain);
+
 private:
-    std::string log_level_ = "info";
+    // 直播业务层配置相关
+    bool ParseDirectory(const YAML::Node& root);
+    bool ParseDomainPath(const std::string& path);
+    bool ParseDomainFile(const std::string& file);
+    void SetDomainInfo(const std::string& domain, DomainInfoPtr& p);
+    void SetAppInfo(const std::string& domain, const std::string& app);
+
+    std::string                                    log_level_ = "info";
+    std::vector<ServiceInfoPtr>                    services_; // 每个用户都会有一个info
+    std::unordered_map<std::string, DomainInfoPtr> domaininfos_;
+    std::mutex                                     lock_;
 };
 
 } // namespace tmms::base
@@ -65,7 +102,6 @@ constexpr bool kEnableFixfd = false;
 // 在 io_uring 中注册的固定文件描述符缓冲区长度，
 // 若你的应用程序需通过单个文件描述符发起大量 I/O 操作，仅需增大该参数值即可。
 constexpr unsigned int kFixFdArraySize = 8;
-
 
 // =========================== tcp configuration ============================
 constexpr int kDefaultPort = 8000;

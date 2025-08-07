@@ -22,8 +22,7 @@ public:
     virtual ~Log() {}
 
     static spdlog::logger* get_core_logger() { return ptr_core_logger_; }
-
-    static spdlog::logger* get_hls_logger() { return ptr_hls_logger_; }
+    static spdlog::logger* get_live_logger() { return ptr_live_logger_; }
     static spdlog::logger* get_rtmp_logger() { return ptr_rtmp_logger_; }
 
 public:
@@ -31,10 +30,10 @@ public:
 
 private:
     static std::shared_ptr<spdlog::logger> core_logger_;
-    static std::shared_ptr<spdlog::logger> hls_logger_;
+    static std::shared_ptr<spdlog::logger> live_logger_;
     static std::shared_ptr<spdlog::logger> rtmp_logger_;
     static spdlog::logger*                 ptr_core_logger_;
-    static spdlog::logger*                 ptr_hls_logger_;
+    static spdlog::logger*                 ptr_live_logger_;
     static spdlog::logger*                 ptr_rtmp_logger_;
 };
 
@@ -51,12 +50,12 @@ private:
 #define APP_WARN(APP_PTR, ...)  SPDLOG_LOGGER_WARN(APP_PTR->get_logger(), __VA_ARGS__)
 #define APP_ERROR(APP_PTR, ...) SPDLOG_LOGGER_ERROR(APP_PTR->get_logger(), __VA_ARGS__)
 
-#define HLS_TRACE(...) SPDLOG_LOGGER_TRACE(tmms::base::Log::get_hls_logger(), __VA_ARGS__)
-#define HLS_DEBUG(...) SPDLOG_LOGGER_DEBUG(tmms::base::Log::get_hls_logger(), __VA_ARGS__)
-#define HLS_INFO(...)  SPDLOG_LOGGER_INFO(tmms::base::Log::get_hls_logger(), __VA_ARGS__)
-#define HLS_WARN(...)  SPDLOG_LOGGER_WARN(tmms::base::Log::get_hls_logger(), __VA_ARGS__)
-#define HLS_ERROR(...) SPDLOG_LOGGER_ERROR(tmms::base::Log::get_hls_logger(), __VA_ARGS__)
-#define HLS_FLUSH()    tmms::base::Log::get_hls_logger()->flush()
+#define LIVE_TRACE(...) SPDLOG_LOGGER_TRACE(tmms::base::Log::get_live_logger(), __VA_ARGS__)
+#define LIVE_DEBUG(...) SPDLOG_LOGGER_DEBUG(tmms::base::Log::get_live_logger(), __VA_ARGS__)
+#define LIVE_INFO(...)  SPDLOG_LOGGER_INFO(tmms::base::Log::get_live_logger(), __VA_ARGS__)
+#define LIVE_WARN(...)  SPDLOG_LOGGER_WARN(tmms::base::Log::get_live_logger(), __VA_ARGS__)
+#define LIVE_ERROR(...) SPDLOG_LOGGER_ERROR(tmms::base::Log::get_live_logger(), __VA_ARGS__)
+#define LIVE_FLUSH()    tmms::base::Log::get_live_logger()->flush()
 
 #define RTMP_TRACE(...) SPDLOG_LOGGER_TRACE(tmms::base::Log::get_rtmp_logger(), __VA_ARGS__)
 #define RTMP_DEBUG(...) SPDLOG_LOGGER_DEBUG(tmms::base::Log::get_rtmp_logger(), __VA_ARGS__)

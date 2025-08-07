@@ -1,0 +1,17 @@
+domain:
+  name: starcs.com
+  type: publish
+  app:
+    - name: live
+      max_buffer: 1000
+      hls_support: on
+      flv_support: on
+      rtmp_support: on
+      content_latency: 3
+      stream_idle_time: 10
+      stream_timeout_time: 100
+      pull:
+        - portocol: rtmp
+          host: heart.com:1936
+          interval: 1
+          max_retry: 2
